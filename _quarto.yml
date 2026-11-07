@@ -1,0 +1,53 @@
+project:
+  type: book
+  execute-dir: project
+  render:
+    - index.qmd
+    - intro/*.qmd
+    - part1/*.qmd
+    - part2/*.qmd
+    - part3/*.qmd
+    - part4/*.qmd
+
+book:
+  title: "LagrangeAcademy"
+  subtitle: "金融計算の保証：Rust で書き、Lean で証明し、R で描画する"
+  author: "Eiichi Horigome"
+  output-file: "lagrangeAcademy"
+
+  chapters:
+    - index.qmd
+
+    - part: "序"
+      chapters:
+        - intro/ch00_guarantee_ladder.qmd
+
+    - part: "第I部 実証の基礎"
+      chapters:
+        - part1/ch00_plan.qmd
+
+    - part: "第II部 定量モデル"
+      chapters:
+        - part2/ch00_plan.qmd
+
+    - part: "第III部 計算の基盤"
+      chapters:
+        - part3/ch00_plan.qmd
+
+    - part: "第IV部 判断と責任"
+      chapters:
+        - part4/ch00_plan.qmd
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    code-fold: false
+    number-sections: false
+
+execute:
+  eval: true
+  echo: true
+  warning: false
+  message: false
+  error: false
