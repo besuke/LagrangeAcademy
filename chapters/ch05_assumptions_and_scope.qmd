@@ -1,6 +1,12 @@
 # 証明の前提と保証の範囲
 
-この章では、Lean の証明が実装と契約の条項に対して何を保証し、何を保証しないかを確かめる。序章の「保証の外に残ったもの」を、確かめる手順として書く。【骨組み：本文はこれから書く】
+```{r}
+#| label: setup-ch05
+#| include: false
+source("R/utility_LAD.R", encoding = "UTF-8")
+```
+
+この章では、Lean の証明が実装と契約の条項に対して何を保証し、何を保証しないかを確かめる。序章の「保証の外に残ったもの」を、確かめる手順として書く。
 
 ## 証明の 3 つの信頼水準
 
@@ -10,22 +16,70 @@
 2. 命題が、本当に証明したかったことと一致している（人が確かめる）
 3. 外部の結果を仮定として置くなら、その仮定を明示している
 
-## 命題と実装を照らす
+## 契約のクーポンの 2 つの式
 
-クーポンの分解の命題の左辺 `min (max (a * S - b) f) c` を、RiemannFinMath の実装と並べて確かめる。
+第3章の契約のクーポン `couponRate` は、キャップの有無によって、次のどちらかの式で書ける。
 
-| 項目 | Lean の命題 | Rust の実装（`prdc.rs`） | 確認 |
-|---|---|---|---|
-| 切り詰めの順序 | `min (max (a * S - b) f) c` | `(fx * scale - terms.subtraction).max(terms.floor).min(terms.cap)` | 未（人が確かめる） |
-| 係数 `a` | 仮定 `0 < a` | `scale = leverage / fx_base`。`check()` で `leverage > 0`、`fx_base > 0` | 未 |
-| フロアとキャップ | 仮定 `f ≤ c` | `check()` で `cap >= floor` | 未 |
-| キャップなし | 命題の外（`c` は実数） | `cap = ∞` のとき第 2 のコールを置かない | 未：命題は有限のキャップだけを扱う |
+| キャップ | クーポンの式 | Lean の定理 |
+|---|---|---|
+| 有限のキャップ `c` | `floor + a ((S − K₁)⁺ − (S − K₂)⁺)`：フロアとコールスプレッド | `PrdcTerms.couponRate_eq_floor_add_call_spread` |
+| キャップなし | `floor + a (S − K₁)⁺`：フロアとコール 1 本 | `PrdcTerms.couponRate_eq_floor_add_call` |
 
-最後の行は、命題と実装が一致しない例である。キャップがない（`∞`）場合は、Lean の命題の対象外になっている。この場合を扱う別の命題を書くか、この差を記録して受け入れるかは、人が決める。
+ここで `a = leverage / fxBase`、`K₁ = floorStrike`、`K₂ = capStrike c` である。
+
+2 つの定理は、第4章の実数の恒等式（有限のキャップは `prdc_coupon_eq_floor_add_call_spread`、キャップなしは `prdc_coupon_without_cap_eq_floor_add_call`）に、構造体の仮定から引数を渡して示す。
+
+次のコードは、Lean が検査したファイル `lean/LagrangeAcademy/PrdcContract.lean` をそのまま読み込んだものである。
+
+```{r}
+#| label: lean-prdc-contract
+#| echo: false
+#| output: asis
+show_lean_source_LAD("PrdcContract")
+```
+
+**保証**：証明（段 1、水準 1）。7 つの定理すべてで `lake build` が警告なしで通り、依存する公理は `propext`、`Classical.choice`、`Quot.sound` の 3 つだけだった（2026-11-08）。
+
+## 実装の表現と契約の条件の対応
+
+Lean と RiemannFinMath（Rust）は、同じ契約の条件を別の形で表している。
+
+| 契約の条件 | Lean | Rust（`prdc.rs`） |
+|---|---|---|
+| 上限 `c` を適用する | `cap = Cap.finite c` | `cap = c`（有限の `f64`） |
+| 上限を適用しない | `cap = Cap.none` | `cap = f64::INFINITY`（R の既定は `cap = Inf`） |
+| フロア ≤ キャップ | 有限のキャップのときだけの欄 `floor_le_cap` | `check()` が `cap >= floor` を確かめる（∞ では常に成り立ち、NaN は弾く） |
+| 傾きが正 | 欄 `fxBase_pos`、`leverage_pos`（定理 `slope_pos`） | `check()` が `fx_base > 0`、`leverage > 0` を確かめる |
+| クーポン（経路の上） | `couponRate`（`Cap` で場合分け） | `(fx * scale - subtraction).max(floor).min(cap)`。∞ の `min` は何もしない |
+| 静的複製 | 2 つの定理 | `compute_prdc_smile_value`：`cap.is_finite()` のときだけ 2 本目のコールを置く |
+
+Rust の `f64::INFINITY` と Lean の `Cap.none` は、**通常の有効な入力における契約上の対応**である。通常の有効な入力とは、次の 3 つを満たすものをいう。
+
+- 基準の FX、レバレッジ、差し引く率、フロアが有限の実数である。
+- 基準の FX とレバレッジが正である。
+- キャップは、フロア以上の有限の実数か、`+∞` である。
+
+この範囲では、Rust の `cap = f64::INFINITY` は契約の「上限を適用しない」を表し、Lean の `Cap.none` に対応する。∞ の `min` が何もしないこと、2 本目のコールを `is_finite()` で外すことが、Rust でのキャップなしの扱いである。Lean では、キャップなしを型の場合分けとして明示し、その場合の式を別の定理として証明した。
+
+この範囲の外の入力は、契約の条件に対応しない。たとえば Rust の `check()` は、`cap = NaN` やフロアより小さいキャップ（`−∞` を含む）を弾く。一方で、フロアや基準の FX が有限かどうかは確かめていない（2026-11-08 にソースで確認）。Lean の側では、これらは実数 `ℝ` なので、無限大や NaN をそもそも取れない。
+
+Lean の証明が保証するのは、Lean 上の命題である。AI は Rust のソースとの対応を調べられるが、契約条項の解釈と最終確認は人が行う（水準 2）。次の節の確認がそれにあたる。
+
+## 命題と実装を照らす（人の確認）
+
+| 項目 | 確認する内容 | 確認 |
+|---|---|---|
+| 切り詰めの順序 | Lean の `min (max (a S − b) f) c` と、Rust の `.max(floor).min(cap)` が同じ順序か | 未 |
+| 傾き | Lean の `slope = leverage / fxBase` と、Rust の `scale = leverage / fx_base` が同じか | 未 |
+| キャップなし | Lean の `Cap.none` と、Rust の `cap = f64::INFINITY` の対応（上の表） | 未 |
+| 静的複製の行使価格 | Lean の `floorStrike`、`capStrike` と、Rust の `(floor + subtraction) / scale`、`(cap + subtraction) / scale` | 未 |
+| 固定クーポン | Rust の `fixed_rates`（固定期間のクーポン）は、**今回の証明の対象外**。固定期間も扱うときに、「固定クーポンは FX に依存しない」という別の命題を追加する（2026-11-08 の決定） | 未 |
+
+確認した人と日付を、この表に記録する。
 
 ## 命題と契約の条項を照らす
 
-扱う予定の内容：契約書（ターム・シート）のクーポンの定義を、命題の左辺と照らす。条項の解釈が分かれる場合の記録。
+扱う予定の内容：契約書（ターム・シート）のクーポンの定義を、`couponRate` と照らす。条項の解釈が分かれる場合の記録。
 
 ## 照合の相手と、モデルの仮定
 

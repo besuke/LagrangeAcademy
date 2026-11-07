@@ -25,8 +25,9 @@
 
 | Lean の命題 | 種類 | Riemann との関係 | 状態 |
 |---|---|---|---|
-| クーポンの分解：`min (max (a S - b) f) c = f + a((S − K₁)⁺ − (S − K₂)⁺)` | 定義上の恒等式 | `compute_prdc_smile_value`（静的複製） | **証明済み**（`PrdcCoupon.lean`） |
+| 契約のクーポンの分解（有限のキャップ）：`couponRate S = floor + a((S − K₁)⁺ − (S − K₂)⁺)` | 定義上の恒等式 | `compute_prdc_smile_value`（静的複製、2 本のコール） | **証明済み**（`PrdcContract.lean`） |
+| 契約のクーポンの分解（キャップなし）：`couponRate S = floor + a(S − K₁)⁺` | 定義上の恒等式 | `compute_prdc_smile_value`（`cap = Inf`、1 本のコール） | **証明済み**（`PrdcContract.lean`） |
 | 「目標まで」のターゲット償還では、どの経路でも支払ったクーポンの累計が目標を超えない | 仮定から導く定理（有限列の帰納） | `compute_prdc_three_factor_value` の `target` | 予定 |
 | ノックアウトつきのノートの各経路の支払いは、ノックアウトなしの支払いと、早期償還の支払いのどちらかに等しい | 定義上の恒等式 | `compute_prdc_three_factor_value` の `knock_out_level` | 予定 |
 
-最初の試作は PRDC の節で、第5章の 5 つの欄の書式で書く。
+最初の試作は PRDC の節で、第5章の 5 つの欄の書式で書く。契約の条件は第3章の `PrdcTerms`（キャップの有無を含む）を使い、クーポンの式は第5章の 2 つの定理を使う。

@@ -58,6 +58,26 @@ theorem prdc_coupon_eq_floor_add_call_spread (a b f c S : ℝ) (ha : 0 < a) (hfc
   rw [mul_sub, scale f, scale c]
   exact clamp_eq_floor_add_call_spread (a * S - b) f c hfc
 
+/-- 下からだけの切り詰めは、`f` に、行使価格 `f` のコールを足したものに等しい。 -/
+theorem floor_eq_floor_add_call (y f : ℝ) : max y f = f + max (y - f) 0 := by
+  rcases le_total y f with h | h
+  · rw [max_eq_right h, max_eq_right (by linarith : y - f ≤ 0)]
+    ring
+  · rw [max_eq_left h, max_eq_left (by linarith : (0 : ℝ) ≤ y - f)]
+    ring
+
+/-- キャップなしの PRDC のクーポンの分解：`a > 0` のとき、
+`max (a S - b) f = f + a (S - K₁)⁺`。 -/
+theorem prdc_coupon_without_cap_eq_floor_add_call (a b f S : ℝ) (ha : 0 < a) :
+    max (a * S - b) f = f + a * max (S - (b + f) / a) 0 := by
+  have ha' : a ≠ 0 := ha.ne'
+  rw [mul_max_of_nonneg _ _ ha.le, mul_zero]
+  have e : a * (S - (b + f) / a) = a * S - b - f := by
+    field_simp
+    ring
+  rw [e]
+  exact floor_eq_floor_add_call (a * S - b) f
+
 end LagrangeAcademy
 
 end

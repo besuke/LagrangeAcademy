@@ -21,6 +21,8 @@ source("R/utility_LAD.R", encoding = "UTF-8")
 
 クーポンの分解の証明は、フロアの下、フロアとキャップの間、キャップの上の 3 つの場合に分けて進む。各場合で `max` と `min` を外し、`linarith` で不等式を、`ring` で等式を閉じる。
 
+キャップなしのクーポン `max (a S − b) f` も、同じように 2 つの場合に分けて、フロアとコール 1 本の和に等しいことを示す（`prdc_coupon_without_cap_eq_floor_add_call`）。2 つの式を契約の条件 `PrdcTerms` の上で使うのは第5章である。
+
 次のコードは、Lean が検査したファイル `lean/LagrangeAcademy/PrdcCoupon.lean` をそのまま読み込んだものである。
 
 ```{r}
@@ -48,4 +50,5 @@ AI が書いた証明も含め、次の場合は合格としない（`docs/conce
 
 | 結果 | 段 | 根拠 |
 |---|---|---|
-| クーポンの分解 `prdc_coupon_eq_floor_add_call_spread` | 証明 | `lake build` が警告なし、公理は標準の 3 つだけ（2026-11-07） |
+| クーポンの分解（有限のキャップ）`prdc_coupon_eq_floor_add_call_spread` | 証明 | `lake build` が警告なし、公理は標準の 3 つだけ（2026-11-08） |
+| クーポンの分解（キャップなし）`prdc_coupon_without_cap_eq_floor_add_call` | 証明 | 同上 |
