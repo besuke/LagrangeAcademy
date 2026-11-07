@@ -1,0 +1,53 @@
+# Rustの基礎と金融計算
+
+```{r}
+#| label: setup-ch01
+#| include: false
+source("R/utility_LAD.R", encoding = "UTF-8")
+```
+
+この章では、金融計算の実装に Rust を使う理由を確かめ、RiemannFinMath の書き方を読む。【骨組み：本文はこれから書く】
+
+## なぜ Rust で書くのか
+
+扱う予定の内容は次の 3 つ。
+
+- 速さ：コンパイルした言語で、並列計算も型で安全に書ける。
+- 安全：`#![forbid(unsafe_code)]`。メモリーの安全をコンパイラが保証する。
+- 値と純粋関数：RiemannFinMath はオブジェクト指向とテンプレートを避け、値と純粋関数、`enum` と `match` で書く。評価日のようなグローバル状態は使わない。
+
+コンパイラが保証するのは型とメモリーの安全までで、計算結果の数値の正しさは保証しない。数値の正しさは照合（序章の段 2）で確かめる。
+
+## Rust の基礎
+
+- 所有権と借用
+- 構造体と `enum`
+- `Result` によるエラー
+- 総称型と `trait`（RiemannFinMath では、自動微分の `Operand` など内部に限る）
+
+## 金融計算を Rust で読む
+
+例として、PRDC のクーポンの静的複製を取り上げる。次のコードは RiemannFinMath のソース `crates/riemann/src/prdc.rs` から、その関数をそのまま読み込んで載せたものである。
+
+```{r}
+#| label: rust-smile-call
+#| echo: false
+#| output: asis
+show_rust_function_LAD("prdc.rs", "smile_call")
+```
+
+```{r}
+#| label: rust-smile-value
+#| echo: false
+#| output: asis
+show_rust_function_LAD("prdc.rs", "smile_value")
+```
+
+クーポンの計算は `(above_floor - above_cap) * scale + terms.floor` の 1 行に集まっている。これは序章の恒等式の右辺（フロア ＋ コールスプレッド）そのものである。この式が左辺（切り詰めたクーポン）と等しいことは、第4章で Lean によって証明する。
+
+## この章の保証
+
+| 結果 | 段 | 根拠 |
+|---|---|---|
+| Rust の関数が型とメモリーの規則を守る | コンパイラ | `cargo build`、`#![forbid(unsafe_code)]` |
+| 静的複製の数値 | 照合 | QuantLib 1.42 と 1e-14 以内（RiemannFinMath `docs/spec_prdc.md` 14 章） |

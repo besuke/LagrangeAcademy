@@ -1,0 +1,32 @@
+# 金融商品への応用
+
+この章では、第6〜8章の命題を、RiemannFinMath が扱う金融商品に当てはめる。各商品は、RiemannFinMath の計算（Rust）、照合の結果、Lean の命題の 3 つを並べて扱う。LagrangeFinance 第 II 部の計算例は、この章で受け継ぐ。【骨組み：本文はこれから書く】
+
+## 債券とカーブ
+
+| Lean の命題 | 種類 | Riemann との関係 |
+|---|---|---|
+| 割引係数が正なら、正のキャッシュフローの現在価値は正 | 仮定から導く定理 | `compute_bond_value_on_curve` |
+| 正のキャッシュフローの債券の価格は、利回りについて単調に減る | 仮定から導く定理 | `compute_price_from_compound_yield` |
+
+## CDS
+
+| Lean の命題 | 種類 | Riemann との関係 |
+|---|---|---|
+| ハザードが非負なら、生存確率は `[0, 1]` にあり、時間について非増加 | 仮定から導く定理 | `compute_survival_probability` |
+
+## コール債
+
+| Lean の命題 | 種類 | Riemann との関係 |
+|---|---|---|
+| 発行体コールつきの債券の価値は、コールなしの価値以下 | 仮定から導く定理 | `compute_hull_white_callable_bond_value` |
+
+## PRDC
+
+| Lean の命題 | 種類 | Riemann との関係 | 状態 |
+|---|---|---|---|
+| クーポンの分解：`min (max (a S - b) f) c = f + a((S − K₁)⁺ − (S − K₂)⁺)` | 定義上の恒等式 | `compute_prdc_smile_value`（静的複製） | **証明済み**（`PrdcCoupon.lean`） |
+| 「目標まで」のターゲット償還では、どの経路でも支払ったクーポンの累計が目標を超えない | 仮定から導く定理（有限列の帰納） | `compute_prdc_three_factor_value` の `target` | 予定 |
+| ノックアウトつきのノートの各経路の支払いは、ノックアウトなしの支払いと、早期償還の支払いのどちらかに等しい | 定義上の恒等式 | `compute_prdc_three_factor_value` の `knock_out_level` | 予定 |
+
+最初の試作は PRDC の節で、第5章の 5 つの欄の書式で書く。

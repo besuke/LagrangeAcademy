@@ -4,10 +4,9 @@ project:
   render:
     - index.qmd
     - intro/*.qmd
-    - part1/*.qmd
-    - part2/*.qmd
-    - part3/*.qmd
-    - part4/*.qmd
+    - chapters/*.qmd
+
+lang: ja
 
 book:
   title: "LagrangeAcademy"
@@ -17,33 +16,24 @@ book:
 
   chapters:
     - index.qmd
-
-    - part: "序"
-      chapters:
-        - intro/ch00_guarantee_ladder.qmd
-
-    - part: "第I部 実証の基礎"
-      chapters:
-        - part1/ch00_plan.qmd
-
-    - part: "第II部 定量モデル"
-      chapters:
-        - part2/ch00_plan.qmd
-
-    - part: "第III部 計算の基盤"
-      chapters:
-        - part3/ch00_plan.qmd
-
-    - part: "第IV部 判断と責任"
-      chapters:
-        - part4/ch00_plan.qmd
+    - intro/ch00_guarantee_ladder.qmd
+    - chapters/ch01_rust_finance.qmd
+    - chapters/ch02_r_calls_rust.qmd
+    - chapters/ch03_lean_models.qmd
+    - chapters/ch04_lean_proofs.qmd
+    - chapters/ch05_assumptions_and_scope.qmd
+    - chapters/ch06_no_arbitrage.qmd
+    - chapters/ch07_numeraire.qmd
+    - chapters/ch08_martingale_measure.qmd
+    - chapters/ch09_applications.qmd
 
 format:
   html:
     theme: cosmo
     toc: true
     code-fold: false
-    number-sections: false
+    # chapters are numbered automatically; the preface and the introduction are not
+    number-sections: true
 
 execute:
   eval: true

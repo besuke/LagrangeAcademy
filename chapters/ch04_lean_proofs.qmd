@@ -1,0 +1,51 @@
+# Leanによる等式と不等式の証明
+
+```{r}
+#| label: setup-ch04
+#| include: false
+source("R/utility_LAD.R", encoding = "UTF-8")
+```
+
+この章では、Lean で等式と不等式を証明する。序章のクーポンの分解の証明を、1 行ずつ読む。【骨組み：本文はこれから書く】
+
+## 定義上の等式と命題としての等式
+
+扱う予定の内容：
+
+- `rfl` で閉じる等式（計算すれば一致する）と、推論が要る等式の違い
+- 金融では次の区別に対応する。
+  - 定義からそのまま出る恒等式：クーポンの分解
+  - モデルの仮定を使って初めて成り立つ定理：無裁定の上下限（第6章）
+
+## 場合分けと不等式
+
+クーポンの分解の証明は、フロアの下、フロアとキャップの間、キャップの上の 3 つの場合に分けて進む。各場合で `max` と `min` を外し、`linarith` で不等式を、`ring` で等式を閉じる。
+
+次のコードは、Lean が検査したファイル `lean/LagrangeAcademy/PrdcCoupon.lean` をそのまま読み込んだものである。
+
+```{r}
+#| label: lean-prdc-coupon
+#| echo: false
+#| output: asis
+show_lean_source_LAD("PrdcCoupon")
+```
+
+## 証明の合格条件
+
+AI が書いた証明も含め、次の場合は合格としない（`docs/concept.md` 3.2 節）。
+
+- `sorry` で証明を省略している。
+- `axiom` で根拠のない前提を加えている。
+- `partial` で停止性の保証を外している。
+- 弱い命題にすり替えている。
+
+機械で確かめることは次の 2 つ。
+
+- `lake build` が警告なしで通る。
+- `lake env lean scripts/print_axioms.lean` で、標準の 3 つの公理（`propext`、`Classical.choice`、`Quot.sound`）以外に依存しない。
+
+## この章の保証
+
+| 結果 | 段 | 根拠 |
+|---|---|---|
+| クーポンの分解 `prdc_coupon_eq_floor_add_call_spread` | 証明 | `lake build` が警告なし、公理は標準の 3 つだけ（2026-11-07） |

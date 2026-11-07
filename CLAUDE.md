@@ -9,6 +9,7 @@ LagrangeFinance を受け継ぐ金融計算の教材。ユーザーとのやり�
 - 結果には保証の段（証明・照合・統計的検証・仮定）を付ける（同 3 章）。
 - Lean を使い、計算が拠り所にする恒等式・不等式を証明する（同 4 章）。
 - 最初は構想の文書から始める。
+- GitHub：https://github.com/besuke/LagrangeAcademy（公開。ユーザーの判断で当面このまま、2026-11-07）。Lean の CI（`lean/.github/workflows/`、直下にないので動かない）は、まだ動かさない。
 - 役割の分担：Rust（RiemannFinMath）で書き、Lean で証明し、R（Quarto）で描画する（同 7 章）。
 - Lean は `lean/`（Lean 4.35.0、Mathlib v4.35.0、モジュール方式）。証明の合格は `lake build` が警告なし、かつ `lake env lean scripts/print_axioms.lean` で標準の 3 公理だけ。`sorry`・`axiom`・`partial`・弱い命題へのすり替えは不可（同 3.2 節）。
 
