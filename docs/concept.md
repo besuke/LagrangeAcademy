@@ -192,6 +192,12 @@ Lean の命題と Rust の実装は、自動ではつながりません。ユー
 - 命題の左辺を、実装の式と同じ形で書く。例：`min (max (a S - b) f) c` は、Rust の `(a S - b).max(floor).min(cap)` と同じ形。
 - 実装の数値は照合（段 2）で確かめる。
 
+**QMD の役割**（2026-11-08 に決定）：
+
+- Rust と Lean のソースコードを教材として示すのは、第1章（Rust）と第3〜5章（Lean）だけである。
+- それ以外の金融計算は、ビルド・インストール済みの R パッケージ RiemannFinMath を使う。各章の QMD は `R/utility_LAD.R` を読み込み、そこを共通の入口として RiemannFinMath の公開関数を呼ぶ。
+- 描画時に Rust をビルドしない。価格式を R で書き直さない。R は入力の準備、関数の呼び出し、結果の表・図への整形だけを行う。
+
 - **文書**：Quarto の book。LagrangeFinance と同じ形式で、HTML と PDF を出力する。
 - **計算**：RiemannFinMath（R から呼ぶ）。LagrangeFinance の GaussQuant による計算は比較の相手として残す。
 - **Lean**：`lean/` に Lake のプロジェクトを置いた（2026-11-07）。Lean 4.35.0 と Mathlib v4.35.0（Mathlib のリリースのタグ）で、Lean のモジュール方式（`module`）を使う。Mathlib はビルド済みのファイルを `lake exe cache get` で取得する。

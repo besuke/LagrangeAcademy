@@ -4,7 +4,6 @@
 #| label: setup
 #| include: false
 source("R/utility_LAD.R", encoding = "UTF-8")
-library(RiemannFinMath)
 ```
 
 ## 流暢で、検証されていない
@@ -55,20 +54,16 @@ $$
 
 RiemannFinMath の `compute_prdc_smile_value()` は、この分解に従って各クーポンを評価する。
 
-次の表は、Rust が計算した結果を R でそのまま表示したものである。
+次の表は、Rust が計算した結果を R でそのまま表示したものである。R は、この本の共通の入口 `R/utility_LAD.R` を通して、インストール済みの R パッケージ RiemannFinMath を呼ぶだけで、価格の式は書いていない。
 
-- FX スマイル：delta 建て、合成の値
-- 条件：スポット 150、基準 150、レバレッジ 0.8、差し引く率 0.78、フロア 0、キャップ 8%、年 1 回のクーポンを 3 本
+条件は、この本の共通の例（`create_prdc_example_LAD()`）である。FX スマイルは delta 建てで、値は合成のものであり、市場の気配ではない。
 
 ```{r}
 #| label: prdc-smile
-curves <- create_flat_curves_LAD("2026-11-02", domestic_rate = 0.012, foreign_rate = 0.035)
-vols <- rbind(c(0.150, 0.130, 0.115, 0.118, 0.135),
-              c(0.156, 0.134, 0.118, 0.121, 0.140),
-              c(0.161, 0.138, 0.121, 0.124, 0.146))
-smile <- create_fx_smile(150, curves$domestic, curves$foreign, c(1, 2, 3), c(-0.1, -0.25), c(0.25, 0.1), vols)
-note <- compute_prdc_smile_value(smile, 1:3, rep(1, 3), 150, 0.8, 0.78, 0, 0.08)
-show_table_LAD(note$coupons, digits = 6)
+example <- create_prdc_example_LAD(cap = 0.08)
+show_table_LAD(format_prdc_example_inputs_LAD(example), caption = "共通の例の条件")
+note <- compute_prdc_smile_value_LAD(example$curves, example$smile, example$terms)
+show_table_LAD(format_prdc_coupons_LAD(note), digits = 6, caption = "クーポンごとの静的複製（RiemannFinMath が計算）")
 ```
 
 `floor_strike` と `cap_strike` が、上の $K_1 = 146.25$ と $K_2 = 161.25$ である。
