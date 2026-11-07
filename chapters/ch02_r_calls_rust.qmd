@@ -108,5 +108,5 @@ plot_prdc_value_by_spot_LAD(values)
 
 | 結果 | 段 | 根拠 |
 |---|---|---|
-| 表と図の数値 | 照合 | RiemannFinMath の FX スマイルと静的複製を QuantLib 1.42 と照合（`docs/spec_prdc.md` 14 章）。R では計算し直していない |
-| R から Rust への引数の受け渡し | 照合 | RiemannFinMath の R のテスト（`tests/testthat/test-fx-smile.R`） |
+| 表と図の数値 | 数値の確認 | 第9章の数値例で、無裁定から導いた関係を満たすことを確かめる。R では計算し直していない |
+| R から Rust への引数の受け渡し | テスト | RiemannFinMath の R のテスト（`tests/testthat/test-fx-smile.R`） |

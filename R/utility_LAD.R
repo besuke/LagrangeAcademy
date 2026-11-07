@@ -294,7 +294,81 @@ compute_prdc_smile_values_LAD <- function(spots, curves, smile, terms) {
 }
 
 
-# ---- 5. shaping results into tables and figures --------------------------------------------------
+#' The domestic discount factors to the coupon dates of an example, from RiemannFinMath: the price
+#' today of the domestic zero-coupon bond paying 1 at each date, the numeraire of that date's
+#' forward measure.
+#'
+#' The example's times are whole years on Actual/365 (Fixed) from its reference date, so the dates are
+#' the reference date plus 365 days a year, the times RiemannFinMath values the coupons at.
+get_prdc_discounts_LAD <- function(example, today = "2026-11-02") {
+  dates <- as.Date(today) + round(365 * example$terms$coupon_times)
+  tibble::tibble(
+    time = example$terms$coupon_times,
+    date = dates,
+    domestic_discount = RiemannFinMath::compute_discount(example$curves$domestic, dates)
+  )
+}
+
+
+# ---- 5. checking consequences of no-arbitrage on RiemannFinMath's numbers ------------------------
+#
+# These functions compare numbers that RiemannFinMath returned; they compute no price. A check that
+# holds here holds for the example only, and does not prove the property.
+
+#' Check that each coupon's value lies between its floor and its cap paid for sure:
+#' `floor * P * accrual * notional <= value <= cap * P * accrual * notional`, with the domestic discount
+#' factor `P` from RiemannFinMath (no-arbitrage bounds; chapter 6).
+check_prdc_coupon_bounds_LAD <- function(result, example) {
+  discounts <- get_prdc_discounts_LAD(example)
+  terms <- example$terms
+  scale <- discounts$domestic_discount * terms$accrual_fractions * terms$notional
+  tibble::tibble(
+    time = result$coupons$time,
+    lower = terms$floor * scale,
+    value = result$coupons$value,
+    upper = if (is.finite(terms$cap)) terms$cap * scale else Inf,
+    within = lower <= value & value <= upper
+  )
+}
+
+#' Compare each coupon's value and the note's value with and without the cap, under the same curves
+#' and smile: removing the cap should not lower any of them (dominance; chapter 6).
+compare_prdc_cap_removal_LAD <- function(with_cap, without_cap) {
+  coupons <- tibble::tibble(
+    item = paste0("クーポン ", with_cap$coupons$time, " 年"),
+    with_cap = with_cap$coupons$value,
+    without_cap = without_cap$coupons$value
+  )
+  total <- tibble::tibble(item = "ノート", with_cap = with_cap$summary$value, without_cap = without_cap$summary$value)
+  rows <- rbind(coupons, total)
+  rows$difference <- rows$without_cap - rows$with_cap
+  rows$not_lower <- rows$without_cap >= rows$with_cap
+  rows
+}
+
+#' Two calculations of RiemannFinMath on one note, which must agree: the static replication on a smile
+#' with one volatility everywhere (compute_prdc_smile_value), and the closed form with that constant
+#' volatility (compute_prdc_value). Both are RiemannFinMath's; R only compares them.
+compare_prdc_flat_smile_LAD <- function(example, volatility) {
+  flat <- utils::modifyList(example$smile, list(volatilities = matrix(volatility, nrow(example$smile$volatilities),
+                                                                       ncol(example$smile$volatilities))))
+  replication <- compute_prdc_smile_value_LAD(example$curves, flat, example$terms)
+  terms <- example$terms
+  closed_form <- RiemannFinMath::compute_prdc_value(
+    example$smile$spot, volatility, example$curves$domestic, example$curves$foreign, terms$coupon_times,
+    terms$accrual_fractions, terms$fx_base, terms$leverage, terms$subtraction, terms$floor, terms$cap,
+    notional = terms$notional, redemption = terms$redemption
+  )
+  tibble::tibble(
+    volatility = volatility,
+    static_replication = replication$summary$value,
+    closed_form = closed_form$summary$npv,
+    difference = static_replication - closed_form
+  )
+}
+
+
+# ---- 6. shaping results into tables and figures --------------------------------------------------
 
 #' A table of results with rounded numbers.
 show_table_LAD <- function(x, digits = 4, caption = NULL) {
