@@ -1,6 +1,6 @@
 # 金融商品への応用
 
-この章では、第6〜8章の命題を、RiemannFinMath が扱う金融商品に当てはめる。各商品は、RiemannFinMath の計算（Rust）、照合の結果、Lean の命題の 3 つを並べて扱う。LagrangeFinance 第 II 部の計算例は、この章で受け継ぐ。PRDC の節は 5 つの欄の書式の試作で、ほかの節は骨組みである。
+この章では、第6〜8章の命題を、RiemannFinMath が扱う金融商品に当てはめる。各商品は、RiemannFinMath の計算（Rust）、照合の結果、Lean の命題の 3 つを並べて扱う。LagrangeFinance 第 II 部の計算例は、この章で受け継ぐ。PRDC の節は本文の試作で、ほかの節は骨組みである。証明・照合・人の確認の記録は第5章にまとめる。
 
 ## 債券とカーブ
 
@@ -23,122 +23,119 @@
 
 ## PRDC
 
-PRDC のノートを、FX のスマイルの上で静的複製によって評価する。この節を、第5章の 5 つの欄の書式で書く最初の試作とする。
-
-- 契約の条件は、第3章の `PrdcTerms`（キャップの有無を含む）を使う。
-- クーポンの式は、第5章の 2 つの定理を使う。
-
 ```{r}
 #| label: setup-ch09
 #| include: false
 source("R/utility_LAD.R", encoding = "UTF-8")
-```
-
-### 計算
-
-この本の共通の例（`create_prdc_example_LAD()`）のノートを、キャップ 8% とキャップなしの 2 通りで評価する。価格と感応度は、`R/utility_LAD.R` の `compute_prdc_smile_value_LAD()` を通して、インストール済みの RiemannFinMath（Rust）が計算する。R は、入力の準備、呼び出し、表への整形だけを行う。
-
-```{r}
-#| label: prdc-two-caps
 with_cap <- create_prdc_example_LAD(cap = 0.08)
 without_cap <- create_prdc_example_LAD(cap = Inf)
-show_table_LAD(format_prdc_example_inputs_LAD(with_cap), caption = "共通の例の条件（キャップ 8% の場合）")
 notes <- list(
   "キャップ 8%" = compute_prdc_smile_value_LAD(with_cap$curves, with_cap$smile, with_cap$terms),
   "キャップなし" = compute_prdc_smile_value_LAD(without_cap$curves, without_cap$smile, without_cap$terms)
 )
+coupons <- notes[["キャップ 8%"]]$coupons
 ```
 
+### どんなノートか
+
+PRDC（パワー・リバース・デュアル・カレンシー債）は、円で元本を払い込み、円で償還を受ける債券である。クーポンの率は、FX レート $S$（円 / 外国通貨）で決まる。
+
+$$
+\text{クーポン率} = \min\bigl(\max(0.8\, S / 150 - 0.78,\ 0),\ 8\%\bigr)
+$$
+
+この本の共通の例の条件は、次のとおりである（入力は合成の値で、市場の気配ではない）。
+
 ```{r}
-#| label: prdc-two-caps-coupons
+#| label: prdc-inputs
+#| echo: false
+show_table_LAD(format_prdc_example_inputs_LAD(with_cap), caption = "共通の例の条件（キャップ 8% の場合）")
+```
+
+円安（$S$ が上がる）ほどクーポンが増える。ただし、FX が `r sprintf("%.2f", coupons$floor_strike[1])` 以下ではクーポンはフロアの 0 にとどまり、`r sprintf("%.2f", coupons$cap_strike[1])` 以上ではキャップの 8% で頭打ちになる。投資家から見ると、円安に賭けた債券であり、その上限がキャップである。
+
+### 評価の方法
+
+各クーポンは、フロアと、2 つの FX 水準 $K_1$、$K_2$ のコールのスプレッドに分解できる。
+
+$$
+\text{クーポン率} = 0 + \frac{0.8}{150}\bigl[(S - K_1)^+ - (S - K_2)^+\bigr],\qquad K_1 = 146.25,\ K_2 = 161.25
+$$
+
+そのため、各クーポン日の FX のスマイルから、2 本のコールの価格を読めば、クーポンの価値が決まる（静的複製）。キャップがなければ、2 本目のコールはない。
+
+この分解がクーポン率について成り立つことは、Lean で証明した（第3章の契約の条件、第5章の 2 つの定理）。価格と感応度は、`R/utility_LAD.R` を通して、インストール済みの RiemannFinMath（Rust）が計算した結果である。
+
+### RiemannFinMath の結果の読み方
+
+クーポンごとの結果を示す（キャップ 8% の場合）。
+
+```{r}
+#| label: prdc-coupons-with-cap
+#| echo: false
 show_table_LAD(format_prdc_coupons_LAD(notes[["キャップ 8%"]]), digits = 6,
-               caption = "キャップ 8%：2 本のコール（RiemannFinMath が計算）")
-show_table_LAD(format_prdc_coupons_LAD(notes[["キャップなし"]]), digits = 6,
-               caption = "キャップなし（cap = Inf）：1 本のコール（RiemannFinMath が計算）")
+               caption = "キャップ 8%：クーポンごとの静的複製（RiemannFinMath が計算）")
 ```
 
-キャップなしでは `cap_strike` が `NaN`（値なし）になる。2 本目のコールを置いていない。RiemannFinMath の R の入口は、値のない行使価格を `NaN` で返す。
+各列の意味は次のとおり。
 
-キャップを外すと、FX が上がったときのクーポンの上限がなくなるので、価格は上がる。
+| 列 | 意味 |
+|---|---|
+| `time` | クーポンの時点（年） |
+| `forward` | その時点の FX フォワード `S P_f / P_d` |
+| `floor_strike`、`cap_strike` | クーポンがフロアとキャップに達する FX 水準（$K_1$、$K_2$） |
+| `floor_volatility`、`cap_volatility` | スマイルの、その FX 水準でのボラティリティ |
+| `rate` | クーポン率の期待値（その時点の国内フォワード測度による） |
+| `value` | クーポンの今日の価値（名目 1 あたり） |
+
+ノート全体の結果は次の 4 つである。
+
+| 列 | 意味 |
+|---|---|
+| `value` | ノートの価格（クーポンと償還の今日の価値、名目 1） |
+| `fx_delta` | スポットに対する感応度。スマイルの delta の行使価格がスポットと一緒に動く（sticky delta） |
+| `fx_delta_sticky_strike` | 同じく、各行使価格のボラティリティは動かさない（sticky strike） |
+| `fx_vega` | スマイルのすべてのボラティリティを同じだけ動かしたときの感応度（ボラティリティ 1 = 100% あたり） |
+
+### キャップを外すと何が変わるか
+
+同じカーブとスマイルで、キャップなしのノートを評価する。キャップなしでは `cap_strike` が `NaN`（値なし）になり、2 本目のコールはない。
 
 ```{r}
-#| label: prdc-two-caps-summary
+#| label: prdc-coupons-without-cap
+#| echo: false
+show_table_LAD(format_prdc_coupons_LAD(notes[["キャップなし"]]), digits = 6,
+               caption = "キャップなし：クーポンごとの静的複製（RiemannFinMath が計算）")
+```
+
+```{r}
+#| label: prdc-summaries
+#| echo: false
 show_table_LAD(format_prdc_summaries_LAD(notes), digits = 6, caption = "ノートの価格と感応度（RiemannFinMath が計算）")
 ```
 
-### 保証
+**この例では**、価格は `r sprintf("%.6f", notes[["キャップ 8%"]]$summary$value)` から `r sprintf("%.6f", notes[["キャップなし"]]$summary$value)` に上がる。FX デルタとベガも大きくなる。キャップがあると円安の利益が 8% で止まるが、キャップなしでは止まらないからである。
 
-この節の結果を、保証の種類で 3 つに分ける。
+**一般には**、同じ評価条件（同じカーブとスマイル）では、キャップを外してもクーポンの価値は下がらない。理由は次の 2 つである。
 
-#### 証明したこと（段 1）
+- どの FX 水準でも、キャップなしのクーポン率 $\max(aS - b, f)$ は、キャップつきの $\min(\max(aS - b, f), c)$ 以上である。
+- 支払いが大きい資産の価格は、低くならない（支配の原理、第6章）。
 
-| 結果 | Lean の定理 | 根拠 |
-|---|---|---|
-| 契約の条件と仮定（キャップの有無を含む）の定義 | `Cap`、`PrdcTerms`、`couponRate`（第3章） | 定義であり、証明の対象ではない |
-| 傾き `a = leverage / fxBase` が正 | `PrdcTerms.slope_pos`（第3章） | 下の 2 行と同じ |
-| 有限のキャップのクーポン = フロア ＋ コールスプレッド | `PrdcTerms.couponRate_eq_floor_add_call_spread`（第5章） | `lake build` が警告なし。公理は標準の 3 つだけ（2026-11-08） |
-| キャップなしのクーポン = フロア ＋ コール 1 本 | `PrdcTerms.couponRate_eq_floor_add_call`（第5章） | 同上 |
+この 2 つ目は無裁定の仮定から導く性質で、Lean ではまだ証明していない（下の表の「予定」）。
 
-#### ソースや数値で照合したこと（段 2）
+### 保証の範囲
 
-| 照合したこと | 相手 | 結果 | 誰が |
-|---|---|---|---|
-| 静的複製の価格とクーポンのレート | QuantLib 1.42 の `BlackVolatilitySurfaceDelta` と `blackFormula`（7 通りの規約） | レートで 1e-15、価格で 1e-14 以内（RiemannFinMath `docs/spec_prdc.md` 14 章、2026-11-07） | AI が実行 |
-| Lean の定義と Rust の実装の対応 | RiemannFinMath のソース `prdc.rs` | 対応する（第5章の対応表）。切り詰めの順序、傾き、行使価格の式、キャップなしの扱い（`is_finite()` で 2 本目のコールを外す）を確認 | AI がソースを読んで確認（2026-11-08） |
+この節の結果が、どこまで確かめられているかを短くまとめる。証明・照合・人の確認の詳細は第5章にある。
 
-AI によるソースの照合は、対応を調べた結果である。契約条項の解釈と最終確認ではない（第5章）。
+- **Lean で証明したもの**：クーポン率の分解だけである（キャップ 8% とキャップなしの両方）。価格と感応度は証明の対象ではない。
+- **QuantLib と照合したもの**：価格とクーポン率である。QuantLib 1.42 の FX ボラティリティ面と `blackFormula` に対して、レートで 1e-15、価格で 1e-14 以内だった。
+- **照合していないもの**：感応度（`fx_delta`、`fx_delta_sticky_strike`、`fx_vega`）は、RiemannFinMath が閉じた式を中心差分で微分した値である。QuantLib との照合の対象ではない。RiemannFinMath のテストで確かめたのは、スマイルが平らな場合に、定数ボラティリティの閉じた式の自動微分と相対 1e-6 以内で一致することまでである。
 
-#### 人の確認待ち（段 4）
-
-| 項目 | 内容 | 状態 |
-|---|---|---|
-| 命題と実装の一致 | 第5章の「命題と実装を照らす」の表（切り詰めの順序、傾き、キャップなしの対応、行使価格、固定クーポン） | 未 |
-| 命題と契約条項の一致 | 契約書（ターム・シート）のクーポンの定義を `couponRate` と照らす | 未（照らす契約書がまだない） |
-| 固定クーポン | 今回の証明の対象外。固定期間も扱うときに別の命題を追加する | 未 |
-| スマイルの値 | この節の値は合成で、市場を表すかは検証していない | 対象外（例示のため） |
-
-### Lean の命題
-
-この節で使う 2 つの定理の文を、Lean が検査したファイル `lean/LagrangeAcademy/PrdcContract.lean` から読み込んで載せる（証明の本体は第5章）。
-
-```{r}
-#| label: lean-prdc-theorems
-#| echo: false
-#| output: asis
-show_lean_theorem_LAD("PrdcContract", "couponRate_eq_floor_add_call_spread")
-show_lean_theorem_LAD("PrdcContract", "couponRate_eq_floor_add_call")
-```
-
-上の表の 2 つのノートは、それぞれ次の定理に対応する。
-
-- キャップ 8%：`cap = Cap.finite 0.08` で、1 つ目の定理
-- キャップなし：`cap = Cap.none` で、2 つ目の定理
-
-Rust の `cap = Inf` が `Cap.none` に対応することは、通常の有効な入力における契約上の対応である（第5章）。
-
-### 人が決めたこと
-
-| 決めたこと | 日付 | 根拠 |
-|---|---|---|
-| 照合の正を QuantLib 1.42 とする | 2026-11 以前（RiemannFinMath の決定事項） | RiemannFinMath `CLAUDE.md` |
-| Lean で有限のキャップとキャップなしを分け、キャップなしを別の命題として証明する | 2026-11-08 | ユーザーの指示 |
-| 固定クーポンを今回の証明の対象外とする | 2026-11-08 | ユーザーの指示 |
-| 役割の分担（Rust で書き、Lean で証明し、R で描画する） | 2026-11-07 | ユーザーの指示 |
-
-### AI に任せたこと
-
-| 任せたこと | AI の出力をどう検査したか |
-|---|---|
-| FX スマイルと静的複製の Rust の実装（RiemannFinMath） | QuantLib 1.42 との照合（段 2）、Rust と R のテスト |
-| QuantLib との照合のスクリプトと照合テスト | 照合の値は QuantLib R パッケージが出したもの |
-| Lean の定義と 2 つの定理の証明 | `lake build` と `#print axioms`（段 1、機械による検査） |
-| Lean の定義と Rust のソースの対応の調査 | まだ検査していない（人の確認待ち） |
-| この節の草稿 | まだ検査していない（人の確認待ち） |
-
-### この節に残る予定の命題
+### この節に残る命題
 
 | Lean の命題 | 種類 | Riemann との関係 | 状態 |
 |---|---|---|---|
+| キャップなしのクーポン率は、キャップつきのクーポン率以上 | 定義から導く不等式 | この節の比較 | 予定 |
 | 「目標まで」のターゲット償還では、どの経路でも支払ったクーポンの累計が目標を超えない | 仮定から導く定理（有限列の帰納） | `compute_prdc_three_factor_value` の `target` | 予定 |
 | ノックアウトつきのノートの各経路の支払いは、ノックアウトなしの支払いと、早期償還の支払いのどちらかに等しい | 定義上の恒等式 | `compute_prdc_three_factor_value` の `knock_out_level` | 予定 |
 | 固定クーポンは FX に依存しない | 定義上の恒等式 | `fixed_rate` | 予定（固定期間を扱うとき） |
