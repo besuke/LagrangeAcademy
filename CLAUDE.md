@@ -19,6 +19,8 @@
   9. AIと形式的証明
 
   第5章までは Lean 本体を中心にし、Mathlib は第6章から本格的に使う。AI の話題は第9章を中心に扱う。
+- **第II部の範囲**（2026-11-10）：連続時間の金融数学も Lean による形式的証明の対象として扱う。とくに伊藤の公式、Girsanov の定理、無裁定価格理論、ニューメレールの変更を重要な参照対象とする（formal-mathfin、brownian-motion）。参照先の README の記述と、実際に確かめた定理は区別して書く。
+- **第I部での外部の形式化**（2026-11-10）：例題や参考文献として使うが、Lean 自体の解説を優先する。第1章では、formal-mathfin の CRR から Black–Scholes への収束定理（`binomialPrice_call_tendsto_bs_closed`）を研究例として簡単に紹介するだけにし、証明の詳しい説明は第II部に回す。
 - **旧原稿**（2026-11-10）：旧構成の序章と第1〜9章は `previous/` に、内容を変えずに退避した（`previous/README.md`）。旧原稿の「第N章」は旧構成の番号のまま直さない。新しい本の描画には含めない。
 - **QuantLib は使わない**（2026-11-08）：LagrangeAcademy には QuantLib への言及・照合表・参照リンクを置かない。保証の階段の段 2 は「数値の確認」（RiemannFinMath の数値が、無裁定から導いた関係・閉じた式を満たすか）。
 - 新しいリポジトリとして作る。LagrangeFinance・GaussQuant・Curie・Riemann は、この教材の作業では変更しない。
@@ -36,7 +38,13 @@
   - 金融計算は、インストール済みの R パッケージ RiemannFinMath を使う。各章の QMD は `R/utility_LAD.R` を読み込み、そこを共通の入口として RiemannFinMath の公開関数を呼ぶ。QMD から RiemannFinMath を直接呼ばない。
   - 描画時に Rust をビルドしない。価格式を R で書き直さない。R の役割は、入力の準備、関数の呼び出し、結果の表・図への整形、無裁定の関係の数値による確認に限る。
   - 例の入力は `create_prdc_example_LAD()` のように `utility_LAD.R` の 1 か所にまとめる。
-- 公理、定理の仮定、証明済みの結果を区別して書く。仮定として置いた結果を、Lean が証明した定理と呼ばない。
+- **既存の形式化を参照する**（2026-11-10 のユーザーの指示）：
+  - 各章の例題は、既存の Lean の数学ライブラリと形式化研究を積極的に参照する。主な参照先は formal-mathfin（https://github.com/formal-applied-math/formal-mathfin）、brownian-motion（https://github.com/RemyDegenne/brownian-motion）、Mathlib（https://github.com/leanprover-community/mathlib4）。
+  - 第1〜5章は Lean 本体による論理・型理論・証明の基礎を優先し、Mathlib の数学構造は第6章から本格的に使う。第8章は有限確率空間を中心にし、brownian-motion への橋渡しをする。第9章は formal-mathfin などの実際の金融数学の形式化を題材に、AI が生成した証明をカーネルが検証する意味を説明する。
+  - 例題を作るときは、参照元の定理名・ファイルパス・使う仮定を確かめ、参照元（リポジトリ、コミット、ファイル）を明記する。丸写しせず、読者が理解できる最小限の例題に段階的に組み立て直す。
+  - 外部ライブラリは参照・調査にとどめ、`lean/` の依存関係（`lakefile.toml`、`lake-manifest.json`）を無断で変えない。調べるときは作業用のフォルダーに clone し、ビルドしない。
+  - 参照した版（2026-11-10 に確認）：formal-mathfin `406ddbb`（2026-11-09、Lean 4.35.0、Mathlib の上に BrownianMotion）、brownian-motion `8fd8dc5`（2026-11-05、Lean 4.36.0-rc2）。README の記述は各リポジトリの自己申告で、こちらでビルドして確かめたものではない。
+- 公理、定理の仮定、証明済みの結果を区別して書く。仮定として置いた結果を、Lean が証明した定理と呼ばない。`sorry`、`axiom`、明示的な仮定、実際に証明した定理を厳密に区別する。
 - 確かめていないことを断定しない。推定は「未確認の推定」と書く。数値例の確認は「この例で成り立つ」ことだけで、命題の証明ではないと書く。
 - 「AI にできないこと」の実例は、実際の作業記録に基づくものだけを書く。実行していない結果や作業記録を創作しない。
 - 市場の気配値（Bloomberg のデータ）は表や出力に出さない。例の入力は合成の値と明記する。
