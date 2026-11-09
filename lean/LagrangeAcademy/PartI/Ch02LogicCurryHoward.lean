@@ -85,7 +85,7 @@ theorem forall_and_split (α : Type) (p q : α → Prop) :
 
 /-- 存在の除去：証人 `x` とその証明を取り出して使う。 -/
 theorem exists_imp (α : Type) (p q : α → Prop) (hpq : ∀ x, p x → q x) :
-    (∃ x, p x) → ∃ x, q x :=
+    (∃ x, p x) → (∃ x, q x) :=
   fun ⟨x, hx⟩ => ⟨x, hpq x hx⟩
 
 /-- 存在しないことは、すべての `x` で成り立たないことと同値である（古典論理は要らない）。 -/
@@ -93,7 +93,7 @@ theorem not_exists_iff (α : Type) (p : α → Prop) : (¬∃ x, p x) ↔ ∀ x,
   ⟨fun h x hx => h ⟨x, hx⟩, fun h ⟨x, hx⟩ => h x hx⟩
 
 /-- 要素 `a` が 1 つあれば、「すべての `x` で成り立つ」から「ある `x` で成り立つ」が出る。 -/
-theorem exists_of_forall (α : Type) (a : α) (p : α → Prop) : (∀ x, p x) → ∃ x, p x :=
+theorem exists_of_forall (α : Type) (a : α) (p : α → Prop) : (∀ x, p x) → (∃ x, p x) :=
   fun h => ⟨a, h a⟩
 
 /-- 要素のない型 `Empty` では、同じ含意が偽になる。 -/
@@ -106,7 +106,8 @@ theorem not_forall_imp_exists_empty : ¬((∀ _ : Empty, False) → ∃ _ : Empt
 
 /-- 1 期間の市場での裁定（価格は整数）。`cost θ` は戦略 `θ` の今日の費用、`payoff θ ω` は
 状態 `ω` での満期の支払い。費用が 0 以下で、どの状態でも支払いが非負で、さらに費用が負か、
-ある状態で支払いが正である。 -/
+ある状態で支払いが正である。確率測度を導入する前の教育用の定義で、どの状態も起こりうるものとして
+扱う。状態の集まり `Ω` が空でないことは、ここでは仮定していない。 -/
 def IsArbitrage (Θ Ω : Type) (cost : Θ → Int) (payoff : Θ → Ω → Int) (θ : Θ) : Prop :=
   cost θ ≤ 0 ∧ (∀ ω, 0 ≤ payoff θ ω) ∧ (cost θ < 0 ∨ ∃ ω, 0 < payoff θ ω)
 
