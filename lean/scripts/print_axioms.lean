@@ -18,3 +18,10 @@ import LagrangeAcademy
 -- PrdcContract.lean (chapter 5)
 #print axioms LagrangeAcademy.PrdcTerms.couponRate_eq_floor_add_call_spread
 #print axioms LagrangeAcademy.PrdcTerms.couponRate_eq_floor_add_call
+
+-- PartI/Ch01ComputationProof.lean (Part I, chapter 1)
+#print axioms LagrangeAcademy.Ch01.sumTo_ten
+#print axioms LagrangeAcademy.Ch01.two_mul_sumTo_of_lt_100
+#print axioms LagrangeAcademy.Ch01.two_mul_sumTo
+#print axioms LagrangeAcademy.Ch01.two_mul_sumTo'
+#print axioms LagrangeAcademy.Ch01.call_sub_put_payoff

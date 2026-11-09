@@ -123,6 +123,40 @@ show_lean_theorem_LAD <- function(name, theorem) {
   show_source_LAD(path, "lean", first:end)
 }
 
+#' Print one Lean declaration with its proof: its doc comment and the lines down to the next blank
+#' line. `name` may include a folder, for example "PartI/Ch01ComputationProof". The declarations
+#' of Part I keep no blank line inside a proof, so the block shown is the one Lean checked.
+show_lean_declaration_LAD <- function(name, declaration) {
+  path <- file.path(find_project_dir_LAD(), "lean", "LagrangeAcademy", paste0(name, ".lean"))
+
+  if (!file.exists(path)) {
+    stop("The Lean file does not exist: ", path, call. = FALSE)
+  }
+
+  text <- readLines(path, encoding = "UTF-8", warn = FALSE)
+  pattern <- paste0("^(theorem|lemma|def|abbrev|structure|inductive|class|instance) ", declaration, "( |$)")
+  start <- which(grepl(pattern, text))[1]
+
+  if (is.na(start)) {
+    stop("The declaration ", declaration, " was not found in ", name, ".lean", call. = FALSE)
+  }
+
+  blank <- which(seq_along(text) > start & !nzchar(trimws(text)))[1]
+  end <- if (is.na(blank)) length(text) else blank - 1L
+
+  first <- start
+  if (start > 1L && grepl("-/\\s*$", text[start - 1L])) {
+    first <- max(which(grepl("^/--", text[seq_len(start - 1L)])))
+  }
+
+  show_source_LAD(path, "lean", first:end)
+}
+
+#' Print a Lean script of lean/scripts (not part of the library, for example the examples Lean rejects).
+show_lean_script_LAD <- function(name) {
+  show_source_LAD(file.path(find_project_dir_LAD(), "lean", "scripts", paste0(name, ".lean")), "lean")
+}
+
 #' Print one Rust function of RiemannFinMath, with its doc comments, from its source file.
 #'
 #' @param file The source file under crates/riemann/src, for example "prdc.rs".
