@@ -1,3 +1,418 @@
 # 依存型・帰納型・停止性
 
-【執筆予定】この章の中心の問い：通常のプログラミング言語の型と、数学を記述する型は何が違うのか。
+```{r}
+#| label: setup-ch03
+#| include: false
+source("R/utility_LAD.R", encoding = "UTF-8")
+```
+
+第2章では、命題は型であり、証明はその型の項であると述べた。この章では、その「型」がどのような仕組みで作られているかを見る。中心になるのは次の 4 つである。
+
+- **依存型**：値に依存する型。全称命題の証明が関数になるのは、この仕組みによる。
+- **宇宙**：型の型。`Prop` と `Type` の区別もここにある。
+- **帰納型**：構成子（コンストラクタ）で値を作る型。帰納法の原理はここから生まれる。
+- **停止性**：再帰で定義した関数が必ず止まること。
+
+最後の停止性が、この章の問いにつながる。**なぜ Lean は、無限ループを許さない形で証明を検査できるのか。** カーネルそのものの仕組みと公理は第4章で扱う。
+
+## 問題提起：証明の言語は、なぜ無限ループを許せないのか
+
+多くのプログラミング言語では、次のような定義が書ける。
+
+```text
+loop : Nat
+loop = loop      -- 自分自身を呼び続け、値を返さない
+```
+
+この `loop` は「型 `Nat` を持つ」と型検査を通るが、実行すると止まらない。プログラムとしては、止まらないことは困るが、矛盾ではない。
+
+ところが、Curry–Howard 対応のもとでは、同じことは致命的になる。型を `False` に変えた
+
+```text
+loop : False
+loop = loop
+```
+
+が受け付けられたら、`False` の証明が手に入る。第2章で見たとおり、偽からは何でも導ける（爆発律）。すべての命題が証明できてしまい、証明の検査は意味を失う。
+
+もう 1 つの問題もある。第1章で見たように、Lean の型検査は計算を含む（`rfl` は、両辺を計算して一致を確かめた）。止まらない項があれば、型検査そのものが止まらなくなるおそれがある。
+
+したがって、証明の言語として使う以上、Lean のすべての定義は**全域的**（どの入力にも値を返す）で、**停止する**ものでなければならない。それでも、再帰で関数を定義できなければ、数学もプログラムも書けない。Lean はこの 2 つをどう両立させているのか。これがこの章の問いである。
+
+## 数学的背景
+
+### 依存型
+
+**依存型**とは、値に依存する型である。代表的なものが 2 つある。
+
+- **依存関数型**（Π 型）：$(x : A) \to B(x)$。引数 $x$ を受け取り、型 $B(x)$ の値を返す関数の型である。返す値の型が引数によって変わる。$B$ が $x$ によらなければ、普通の関数型 $A \to B$ になる。
+- **依存和型**（Σ 型）：$(x : A) \times B(x)$。値 $x$ と、型 $B(x)$ の値の組の型である。2 つ目の成分の型が 1 つ目の成分によって変わる。
+
+第2章の Curry–Howard 対応の表で、$\forall x,\ P(x)$ が依存関数型、$\exists x,\ P(x)$ が依存和型に対応したのは、この仕組みによる。
+
+依存型はプログラムでも役に立つ。たとえば、**長さ $n$ のベクトルの型** $\mathrm{Vec}(\alpha, n)$ を考える。長さが型の一部になっているので、
+
+- 空でないベクトルの先頭を取る関数は、型 $\mathrm{Vec}(\alpha, n + 1) \to \alpha$ を持つ。空のベクトル（長さ 0）はそもそも渡せない。
+- 添字を型 $\mathrm{Fin}(n)$（$0 \le i < n$ を満たす $i$ の型）で受け取れば、範囲外の添字は渡せない。
+
+実行時に範囲外かどうかを調べるのではなく、**範囲外の添字という状態を型として作れなくする**。これが依存型の考え方である。
+
+依存型の理論は、Martin-Löf が 1970 年代に作った型理論に始まる。Coquand と Huet の Calculus of Constructions（構成の計算）、それに帰納型を加えた Calculus of Inductive Constructions（帰納的構成の計算）を経て、Rocq や Lean の型理論につながっている。Lean の型理論は、この系統の型理論に、定義上の等式としての証明の無関係性（後の節）や商型（第4章）などを加えたものである。
+
+### 宇宙：型の型
+
+型も項であり、型を持つ。型の型を**宇宙**という。Lean の宇宙は次のように積み重なっている。
+
+$$
+\mathtt{Prop} : \mathtt{Type},\quad
+\mathtt{Type} : \mathtt{Type\ 1},\quad
+\mathtt{Type\ 1} : \mathtt{Type\ 2},\quad \ldots
+$$
+
+`Prop` は命題の宇宙、`Type` はデータの型（`Nat`、`Int`、`List Nat` など）の宇宙である。Lean の内部では、これらは `Sort 0`（`Prop`）、`Sort 1`（`Type`）、`Sort 2`（`Type 1`）と番号で表される。
+
+なぜ `Type : Type`（型の宇宙が自分自身を要素に持つ）としないのか。そうすると、集合論の Russell の逆理に似た矛盾が型理論の中で作れることが知られている（Girard の逆理）。宇宙を積み重ねるのは、それを避けるためである。
+
+`Prop` には、`Type` にない特別な性質が 2 つある。
+
+1. **非可述性**：「すべての命題 $p$ について…」という量化を含む命題も、また `Prop` に入る。たとえば $\forall p : \mathtt{Prop},\ p \to p$ は `Prop` の要素である。一方、「すべての型 $\alpha$ について…」という型 $(\alpha : \mathtt{Type}) \to \alpha \to \alpha$ は、`Type` ではなく、1 つ上の `Type 1` に入る。
+2. **証明の無関係性**：同じ命題の 2 つの証明は、等しいものとして扱われる。命題について大事なのは、証明があるかないかだけで、どの証明かは問わない。
+
+### 帰納型
+
+**帰納型**は、構成子を並べて定義する型である。たとえば自然数は次のように定義できる。
+
+- `zero` は自然数である。
+- `n` が自然数なら、`succ n` も自然数である。
+- 自然数は、この 2 つの規則で有限回作ったものだけである。
+
+最後の「それだけである」が、**帰納法の原理**を与える。すべての自然数がこの 2 つの規則で作られるなら、`zero` で成り立ち、`n` で成り立てば `succ n` でも成り立つ性質は、すべての自然数で成り立つ。
+
+Lean では、帰納型を定義すると、この原理が**再帰子**という定数として自動で作られる。再帰子は、帰納法の原理（証明を作るとき）と、再帰による関数の定義（データを作るとき）を兼ねる。第1章の `induction n with | zero => … | succ n ih => …` は、自然数の再帰子を使った証明だったのである。
+
+帰納型は、自然数のほかに、リスト、木、論理結合子（第2章の `And`、`Or`、`False`、`Exists` も帰納型である）など、多くのものを表せる。また、`Vec α n` のように、型の引数（添字）ごとに別の型を定める**帰納型の族**も作れる。
+
+帰納型の定義には制約がある。構成子の引数に、定義しようとしている型そのものが**否定の位置**（関数の引数の側）に現れてはならない（**厳密な正値性**）。たとえば、
+
+$$
+\mathtt{mk} : (\mathrm{Bad} \to \mathtt{False}) \to \mathrm{Bad}
+$$
+
+という構成子を持つ型 $\mathrm{Bad}$ を認めると、次の項が作れてしまう。
+
+- $f : \mathrm{Bad} \to \mathtt{False}$ を「$b = \mathtt{mk}\ g$ なら $g\,b$ を返す」と定義する。
+- すると $f\,(\mathtt{mk}\ f) : \mathtt{False}$ である。
+
+これは `False` の証明であり、しかも計算すると $f\,(\mathtt{mk}\ f)$ が自分自身に戻って止まらない。問題提起で見た無限ループが、帰納型を通して入り込むのである。Lean のカーネルは、このような定義を拒否する（後の節で実際に見る）。
+
+### `Prop` から何を取り出せるか
+
+証明の無関係性には、もう 1 つの帰結がある。`Prop` の帰納型（`∃` や `∨` など）の証明から、**一般のデータ**を取り出すことはできない（例外として、構成子が高々 1 つで、その引数がすべて証明であるか型の添字に現れる型、たとえば `And`、`Eq`、`False` からは、`Type` の値を返す場合分けもできる。どの証明から始めても結果が 1 通りに決まるからである）。
+
+理由は次のように説明できる。`∃ n, 0 < n` の証明として、証人が 1 のものと、証人が 2 のものの 2 つを作れる。もし証明から証人を取り出す関数があれば、2 つの証明から 1 と 2 が取り出せる。ところが、証明の無関係性によって 2 つの証明は等しいので、取り出した値も等しいはずで、$1 = 2$ となって矛盾する。そのため Lean は、`∃` の証明の場合分けを、命題を示すとき（`Prop` に値を返すとき）にだけ許す。第2章の注意で「証明が証人を含むことと、その証人を計算に使えることは別の問題である」と書いたのは、このことである。
+
+証人をデータとして使いたいときは、`Prop` ではない型で書く。**部分型** `{x : α // p x}` は、値 `x` と、`p x` の証明の組を値として持つ `Type` の要素である。値の部分は自由に取り出して計算に使える。
+
+### 停止性
+
+Lean が再帰を許しながら停止性を保つ方法は、次の 2 つである。
+
+1. **構造的再帰**：再帰呼び出しの引数が、元の引数の**真部分**（構成子の引数）である場合。たとえば `succ n` についての定義から `n` を呼ぶ。帰納型の値は構成子を有限回使って作られているので、真部分をたどる再帰は必ず底に着く。構造的再帰は、帰納型の再帰子でそのまま書ける。
+2. **整礎再帰**：再帰呼び出しのたびに、ある量（たとえば自然数）が、無限に減り続けることのない順序（**整礎**な順序。自然数の $<$ がその例）で減る場合。減る量を `termination_by` で指定し、減ることの証明を `decreasing_by` で与える。証明が自動で見つかることも多い。
+
+大事な点は、**カーネルは停止性を検査しない**ことである。エラボレータが、再帰による定義を、再帰子（構造的再帰の場合）か、整礎な関係についての一般の構成 `WellFounded.fix`（整礎再帰の場合）を使った項に翻訳する。カーネルが見るのは翻訳後の項だけで、それらは再帰子と整礎性の証明からできているので、作り方からして停止する。停止性の判定という複雑な処理は、第1章の de Bruijn の基準でいう「信頼しなくてよい部分」に置かれている。翻訳を誤れば、カーネルの型検査で拒否されるだけである。
+
+ただし、整礎再帰で定義した関数は、そのままでは `rfl` で計算できない。Lean は、整礎再帰の定義を、既定では定義上の等式の計算で展開しないように扱う（後の節で実際に確かめる）。展開すると整礎性の証明そのものを計算することになり、遅かったり、計算が進まなかったりするからだと説明されている（未確認の推定を含む。詳しくは第4章で扱う）。そのような関数の性質は、Lean が作る**定義の等式**（`f n = …` という形の補題）を使って書き換えて示す。
+
+すべてのプログラムについて停止するかどうかを判定するアルゴリズムはない（停止問題、第1章の Turing の結果）。そのため Lean は、停止性を自動で示せないときに、人に証明を求める。どうしても停止性が示せないプログラムは、`partial` をつけて定義できる。`partial` の定義は実行できるが、Lean の論理の中では中身の分からない定数として扱われ、その振る舞いについての定理は証明できない。また、`partial` の定義は、返す型が空でないことを要求する。空でない型の値なら、止まらない計算の代わりに置いても矛盾は生じないからである。`False` を返す `partial` の定義は作れない。
+
+## Lean による説明
+
+コードは、Lean が検査したファイル `lean/LagrangeAcademy/PartI/Ch03DependentInductive.lean` から読み込んで示す。Lean が受け付けない例と、`#check`・`#eval` の結果は、確認用のスクリプト `lean/scripts/ch03_checks.lean`（この節の最後に全体を示す）を 2026-11-10 に `lean/` で実行したものである。
+
+### 宇宙を見る
+
+確認用のスクリプトの `#check` の結果は、次のとおりである。
+
+```text
+Prop : Type
+Type : Type 1
+(α : Type) → α → α : Type 1
+∀ (p : Prop), p → p : Prop
+```
+
+1 行目と 2 行目が宇宙の積み重なりである。3 行目と 4 行目は、`Type` と `Prop` の違い（非可述性）を示す。型についての量化を含む型は 1 つ上の宇宙 `Type 1` に入り、命題についての量化を含む命題は `Prop` のままである。`Type : Type` と書くと、型が合わないと報告される（後の「Lean が受け付けない例」）。
+
+### 帰納型と再帰子
+
+```{r}
+#| label: lean-mynat
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "MyNat")
+```
+
+`MyNat` を定義すると、Lean は再帰子 `MyNat.rec` を自動で作る。その型を `#check @MyNat.rec` で表示すると、次のようになる。
+
+```text
+@MyNat.rec : {motive : MyNat → Sort u_1} →
+  motive MyNat.zero → ((a : MyNat) → motive a → motive a.succ) → (t : MyNat) → motive t
+```
+
+読み方は次のとおりである。
+
+- `motive` は、示したい性質（または、作りたい値の型）である。`MyNat → Sort u_1` なので、命題（`Prop`）でもデータの型（`Type`）でもよい。
+- 2 つ目の引数は、`zero` の場合である。
+- 3 つ目の引数は、「`a` で成り立てば `a.succ` でも成り立つ」である。
+- そうすれば、すべての `t` で成り立つ。
+
+`motive` が命題なら、これはそのまま数学的帰納法の原理である。`motive` がデータの型なら、再帰による関数の定義になる。
+
+### 構造的再帰と、定義上の等式
+
+```{r}
+#| label: lean-mynat-add
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "MyNat.add")
+```
+
+足し算は、2 つ目の引数についての構造的再帰で定義した。`.succ b` の場合に、真部分の `b` で再帰している。
+
+```{r}
+#| label: lean-mynat-add-zero
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "MyNat.add_zero")
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "MyNat.zero_add")
+```
+
+`a + zero = a` は、定義の 1 行目そのものなので、計算すれば両辺が一致し、`rfl` で閉じる。一方、`zero + a = a` は、`a` が変数のままでは定義のどの行にも当てはまらず、計算が進まない。そのため、`a` についての帰納法（再帰子）が要る。`succ` の場合は、帰納法の仮定 `ih` の両辺に `MyNat.succ` をつけて（`congrArg`）閉じる。
+
+同じ「足し算と 0」の等式でも、計算で閉じるものと、推論が要るものがある。この違い（**定義上の等式**と**命題としての等式**）は、第4章で詳しく扱う。
+
+### 依存型：長さを型に持つベクトル
+
+```{r}
+#| label: lean-vec
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "Vec")
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "Vec.head")
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "Vec.get")
+```
+
+`Vec α n` は、添字 `n`（長さ）を持つ帰納型の族である。`nil` の長さは 0、`cons` は長さ `n` のベクトルの前に要素を 1 つ足して長さ `n + 1` にする。
+
+- `Vec.head` は、型 `Vec α (n + 1)` の値しか受け取らない。長さが `n + 1` の値は `cons` でしか作れないので、`nil` の場合を書かなくても、Lean はすべての場合を尽くしていると判断する。
+- `Vec.get` は、添字を `Fin n` で受け取る。`Fin n` の値は、自然数 `i` と、`i < n` の証明 `h` の組 `⟨i, h⟩` である。`nil` の場合には `Fin 0` の値が必要だが、`i < 0` となる `i` はないので、この場合も書く必要がない。再帰のときは、`h : i + 1 < n + 1` から `i < n` の証明を作って渡している。
+
+```{r}
+#| label: lean-vec-get-zero
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "Vec.get_zero")
+```
+
+この定理は、命題の中に証明（`Nat.succ_pos n : 0 < n + 1`）を含んでいる。添字を作るには、それが範囲内である証明が要るからである。データと証明が 1 つの項の中で組み合わさるのが、依存型の特徴である。
+
+### `Prop` と `Type`
+
+```{r}
+#| label: lean-proof-irrel
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "proof_irrel")
+```
+
+同じ命題 `p` の 2 つの証明 `h₁` と `h₂` は、`rfl` で等しいと示せる。Lean では、証明の無関係性が定義上の等式として組み込まれているからである（第4章）。
+
+```{r}
+#| label: lean-positive-witness
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "positiveWitness")
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "positiveWitness_pos")
+```
+
+部分型の値 `x : {n : Nat // 0 < n}` からは、自然数 `x.val` をデータとして取り出せる。それが正であることは `x.property` が証明している。一方、`∃ n, 0 < n` の証明から自然数を取り出そうとすると、Lean は拒否する（次の節）。
+
+### 構造的再帰でない再帰
+
+```{r}
+#| label: lean-num-digits
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "numDigits")
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "numDigits_12345")
+```
+
+`numDigits` は、`n / 10` で再帰する。`n / 10` は `n` の構成子の引数ではないので、構造的再帰にはならない。そこで、
+
+- `termination_by n`：再帰のたびに `n` そのものが減ることを示す、と指定する。
+- `decreasing_by omega`：減ることの証明を `omega`（第1章で見た整数と自然数の決定手続き）で与える。`if` の条件から `¬(n < 10)` が分かっているので、`n / 10 < n` が示せる。
+
+`numDigits 12345 = 5` は、`rfl` では示せない（次の節）。整礎再帰の定義は展開されないからである。`simp [numDigits]` は、Lean が作った定義の等式を使って書き換え、計算を進める。
+
+### Lean が受け付けない例
+
+確認用のスクリプトの全体を示す。
+
+```{r}
+#| label: lean-ch03-checks
+#| echo: false
+#| output: asis
+show_lean_script_LAD("ch03_checks")
+```
+
+実行結果のうち、エラーの部分と `#eval` の結果は次のとおりである（ファイルの場所の表示は短くした。`#check` の結果は前に示した）。
+
+```text
+ch03_checks.lean:22:2: error(nested.lean.propRecLargeElim): Tactic `cases` failed with a nested error:
+Tactic `induction` failed: recursor `Exists.casesOn` can only eliminate into `Prop`
+
+motive : (∃ n, 0 < n) → Sort ?u.10
+h_1 : (n : ℕ) → (h : 0 < n) → motive ⋯
+h✝ : ∃ n, 0 < n
+⊢ motive h✝ after processing
+  _
+the dependent pattern matcher can solve the following kinds of equations
+- <var> = <term> and <term> = <var>
+- <term> = <term> where the terms are definitionally equal
+- <constructor> = <constructor>, examples: List.cons x xs = List.cons y ys, and List.cons x xs = List.nil
+ch03_checks.lean:26:4: error: fail to show termination for
+  rejected_loop
+with errors
+failed to infer structural recursion:
+Not considering parameter n of rejected_loop:
+  it is unchanged in the recursive calls
+no parameters suitable for structural recursion
+
+well-founded recursion cannot be used, `rejected_loop` does not take any (non-fixed) arguments
+ch03_checks.lean:29:0: error: failed to compile 'partial' definition `rejected_partial_false`, could not prove that the type
+  ∀ (n : ℕ), False
+is nonempty.
+
+This process uses multiple strategies:
+- It looks for a parameter that matches the return type.
+- It tries synthesizing 'Inhabited' and 'Nonempty' instances for the return type, while making every parameter into a local 'Inhabited' instance.
+- It tries unfolding the return type.
+
+If the return type is defined using the 'structure' or 'inductive' command, you can try adding a 'deriving Nonempty' clause to it.
+ch03_checks.lean:32:0: error: (kernel) arg #1 of 'RejectedNegative.mk' has a non positive occurrence of the datatypes being declared
+111
+ch03_checks.lean:43:0: error: Not a definitional equality: the left-hand side
+  collatzSteps 1
+is not definitionally equal to the right-hand side
+  0
+ch03_checks.lean:43:53: error: Type mismatch
+  rfl
+has type
+  ?m.7 = ?m.7
+but is expected to have type
+  collatzSteps 1 = 0
+ch03_checks.lean:46:56: error: Type mismatch
+  rfl
+has type
+  ?m.7 = ?m.7
+but is expected to have type
+  numDigits 12345 = 5
+ch03_checks.lean:49:7: error: Type mismatch
+  Type
+has type
+  Type 1
+of sort `Type 2` but is expected to have type
+  Type
+of sort `Type 1`
+```
+
+1 つずつ読む。
+
+- **`∃` の証明から証人を取り出す例**（22 行目）：「再帰子 `Exists.casesOn` は `Prop` にしか値を返せない」と報告される。前の「`Prop` から何を取り出せるか」の節で述べた制約である。返したいのは `Nat`（`Type` の要素）なので、場合分けができない。
+- **引数が減らない再帰**（26 行目）：Lean は、まず構造的再帰を試し（引数 `n` が再帰呼び出しで変わっていないので不可）、次に整礎再帰を試す（減る量がないので不可）。どちらも失敗したので、「停止性を示せない」と報告する。
+- **`False` を返す `partial` の定義**（29 行目）：`partial` は、返す型が空でないことを要求する。`∀ n, False` は空なので拒否される。問題提起の `loop : False` は、この形では作れない。
+- **否定の位置に自分自身を含む帰納型**（32 行目）：エラーの先頭の `(kernel)` は、この検査をカーネルが行ったことを示す。厳密な正値性の違反である。
+- **`partial` な定義の実行と証明**（43 行目）：`#eval collatzSteps 27` は `111` を返す。プログラムとしては実行できる。しかし `collatzSteps 1 = 0` は `rfl` で示せない。`partial` の定義は、論理の中では中身の分からない定数だからである。なお、Collatz の問題（どの正の整数から始めても 1 に着くか）は未解決なので、この関数が常に止まることを証明して全域的な定義にすることは、現時点ではできない。
+- **整礎再帰の定義と `rfl`**（46 行目）：`numDigits 12345 = 5` は真だが、`rfl` では示せない。ライブラリでは `simp [numDigits]` で示した。
+- **`Type : Type`**（49 行目）：`Type` の型は `Type 1` なので、`Type` の要素ではない。
+
+## 検証
+
+この章のライブラリの定理について、この本の合格条件（`lake build` が警告なしで通り、依存する公理が `propext`、`Classical.choice`、`Quot.sound` の 3 つ以内であること）を確かめた。2026-11-10 に `lean/` で `lake build` と `lake env lean scripts/print_axioms.lean` を実行した結果は、次のとおりである。
+
+| 定理 | 内容 | 依存する公理 |
+|---|---|---|
+| `MyNat.add_zero` | 計算で閉じる等式（`rfl`） | なし |
+| `MyNat.zero_add` | 帰納法が要る等式 | なし |
+| `Vec.get_zero` | 依存型のベクトルの取り出し | `propext` |
+| `proof_irrel` | 証明の無関係性 | なし |
+| `positiveWitness_pos` | 部分型の値の性質 | なし |
+| `numDigits_12345` | 整礎再帰の関数の計算（`simp`） | `propext`、`Quot.sound` |
+| `PayoffTree.allNonneg_iff` | 支払いの木（次の節） | `propext`、`Classical.choice`、`Quot.sound` |
+| `PayoffTree.example_allNonneg` | 具体的な木の判定（`decide`） | `propext`、`Classical.choice`、`Quot.sound` |
+| `PayoffTree.example_not_allNonneg` | 具体的な木の判定（`decide`） | `propext`、`Classical.choice`、`Quot.sound` |
+
+`Vec.get_zero` は、`rfl` だけで証明したのに `propext` に依存している。`Vec.get` のパターン照合（`⟨0, _⟩` と `⟨i + 1, h⟩`）を Lean が内部の項に翻訳するときに、この公理を使う補題が入ったものと考えられる（未確認の推定。詳しい仕組みは確かめていない）。最後の 2 つの `decide` の定理は、判定に使う `Decidable` のインスタンスが `allNonneg_iff` の証明を使っているので、その公理への依存を引き継いでいる。
+
+## 金融数学への接続
+
+第2章では、裁定の条件の一部として「どの状態でも支払いが非負」（$\forall \omega,\ 0 \le \mathrm{payoff}(\omega)$）を論理式で書いた。状態の集まりは抽象的な型 $\Omega$ のままだった。ここでは、状態を**帰納型**で表してみる。
+
+株価が各期に上がるか下がるかする多期間のモデルでは、満期の状態は二分木の葉として並ぶ。満期の支払いの木を次の帰納型で表す。
+
+```{r}
+#| label: lean-payoff-tree
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "PayoffTree")
+```
+
+葉 `leaf payoff` は満期の 1 つの状態で、そこでの支払いを持つ。分岐 `branch up down` は、上がる場合と下がる場合の 2 つの部分木を持つ。帰納型の値は有限なので、この木の葉（満期の状態）は有限個である。
+
+「どの状態でも支払いが非負」は、木の形に沿って次のように定義できる。
+
+```{r}
+#| label: lean-all-nonneg
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "PayoffTree.AllNonneg")
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "PayoffTree.minPayoff")
+```
+
+`AllNonneg` は命題（`Prop`）で、**何が成り立つべきか**を述べる。`minPayoff` は計算（`Int` を返す関数）で、**どう確かめるか**を与える。どちらも構造的再帰なので、必ず止まる。この 2 つが一致することを、帰納法で証明する。
+
+```{r}
+#| label: lean-all-nonneg-iff
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "PayoffTree.allNonneg_iff")
+```
+
+葉の場合は、両辺が定義から同じ命題なので `Iff.rfl` で閉じる。分岐の場合は、定義を展開し（`simp only`）、帰納法の仮定 `ihu`、`ihd` で書き換えると、「$0 \le a$ かつ $0 \le b$」と「$0 \le \min(a, b)$」の同値が残る。これを `omega` で閉じる。
+
+この同値を使えば、`AllNonneg` を判定する手続き（`Decidable` のインスタンス）が作れる。
+
+```{r}
+#| label: lean-all-nonneg-decidable
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "PayoffTree.example_allNonneg")
+show_lean_declaration_LAD("PartI/Ch03DependentInductive", "PayoffTree.example_not_allNonneg")
+```
+
+第2章の最後で、「戦略と状態が有限で、判定が決定可能なら、構成的な探索ができる場合がある」と述べた。この例はその小さな形である。状態が帰納型の木で表されていて有限なので、「どの状態でも支払いが非負」は計算で判定できる。
+
+この例から、第II部と第III部につながる 2 つのことが見える。
+
+1. **仕様と計算の一致**：`AllNonneg`（仕様）と `minPayoff`（計算）が一致することを、定理として証明した。第III部では、Lean で述べた仕様と、Rust で書いた計算をどうつなぐかを考える。この例は、その問題を Lean の中だけで小さく示したものである。
+2. **後ろ向きの帰納**：多期間の二項モデルでのオプションの価格は、満期から 1 期ずつさかのぼって計算する（後ろ向きの帰納）。これは木についての構造的再帰であり、木が有限なので必ず止まる。第II部の多期間のモデルとアメリカン・オプションで、この形を使う。
+
+ここでも、支払いは整数とした。実数での扱いは第7章、確率を持つモデルでの「ほとんど確実に非負」は第8章と第II部で扱う。
+
+## 演習
+
+1. `MyNat` の掛け算 `MyNat.mul` を、2 つ目の引数についての構造的再帰で定義せよ。`a * zero = zero` を `rfl` で、`zero * a = zero` を帰納法で証明せよ。
+2. 2 つのベクトルをつなぐ関数を、型 `Vec α m → Vec α n → Vec α (m + n)` と、型 `Vec α m → Vec α n → Vec α (n + m)` の 2 通りで定義してみよ。1 つ目の引数についての再帰で書いたとき、どちらの型が通りやすいか。理由を、自然数の足し算の定義（2 つ目の引数についての再帰）と、定義上の等式の観点から説明せよ。
+3. 「`∃` の証明から証人を取り出す関数があれば、$1 = 2$ が導ける」という議論を、`∃ n, 0 < n` の 2 つの証明を具体的に書いて説明せよ。部分型 `{n : Nat // 0 < n}` では、同じ議論がなぜ矛盾にならないか。
+4. 2 つの自然数の最大公約数を、Euclid の互除法（`gcd a b = gcd b (a % b)`）で定義せよ。`termination_by` に何を指定すればよいか考え、`decreasing_by` の証明を与えよ。
+5. `PayoffTree` について、支払いの最大値 `maxPayoff` と、「ある状態で支払いが正」を表す命題 `AnyPositive` を定義せよ。`AnyPositive t ↔ 0 < maxPayoff t` を証明し、`AnyPositive` を判定する `Decidable` のインスタンスを作れ。第2章の裁定の定義のうち、満期の支払いについての 2 つの条件が、この木の上では計算で判定できることを確かめよ。

@@ -45,3 +45,14 @@ import LagrangeAcademy
 #print axioms LagrangeAcademy.Ch02.noArbitrage_iff_forall
 #print axioms LagrangeAcademy.Ch02.not_noArbitrage_of_exists
 #print axioms LagrangeAcademy.Ch02.exists_arbitrage_of_not_noArbitrage
+
+-- PartI/Ch03DependentInductive.lean (Part I, chapter 3)
+#print axioms LagrangeAcademy.Ch03.MyNat.add_zero
+#print axioms LagrangeAcademy.Ch03.MyNat.zero_add
+#print axioms LagrangeAcademy.Ch03.Vec.get_zero
+#print axioms LagrangeAcademy.Ch03.proof_irrel
+#print axioms LagrangeAcademy.Ch03.positiveWitness_pos
+#print axioms LagrangeAcademy.Ch03.numDigits_12345
+#print axioms LagrangeAcademy.Ch03.PayoffTree.allNonneg_iff
+#print axioms LagrangeAcademy.Ch03.PayoffTree.example_allNonneg
+#print axioms LagrangeAcademy.Ch03.PayoffTree.example_not_allNonneg
