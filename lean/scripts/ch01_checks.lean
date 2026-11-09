@@ -2,7 +2,8 @@
   第1章の確認用スクリプト。ライブラリには入れない（lake build の対象ではない）。
   `lean/` で次を実行すると、各行の結果が表示される。
     lake env lean scripts/ch01_checks.lean
-  このファイルの 4 つの定理のうち 3 つは、Lean が受け付けない例である。実行するとエラーが出る。
+  このファイルの 5 つの定理のうち 3 つは、Lean が受け付けない例である。実行するとエラーが出る。
+  残りの 2 つは受け付けられるが、native_decide は公理を加え、sorry は警告を出す。
 -/
 import LagrangeAcademy
 
@@ -36,3 +37,9 @@ theorem accepted_by_native_decide : ∀ n, n < 100 → 2 * sumTo n = n * (n + 1)
   native_decide
 
 #print axioms accepted_by_native_decide
+
+-- 7. sorry を明示的に書くと、エラーではなく警告になる（ビルドは成功する）
+theorem explicit_sorry (n : Nat) : 2 * sumTo n = n * (n + 1) := by
+  sorry
+
+#print axioms explicit_sorry
