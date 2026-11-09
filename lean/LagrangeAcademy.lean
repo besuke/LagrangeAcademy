@@ -6,3 +6,4 @@ public import LagrangeAcademy.PrdcContract
 public import LagrangeAcademy.PartI.Ch01ComputationProof
 public import LagrangeAcademy.PartI.Ch02LogicCurryHoward
 public import LagrangeAcademy.PartI.Ch03DependentInductive
+public import LagrangeAcademy.PartI.Ch04KernelAxioms

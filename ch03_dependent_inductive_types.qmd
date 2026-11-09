@@ -357,7 +357,7 @@ of sort `Type 1`
 | `PayoffTree.example_allNonneg` | 具体的な木の判定（`decide`） | `propext`、`Classical.choice`、`Quot.sound` |
 | `PayoffTree.example_not_allNonneg` | 具体的な木の判定（`decide`） | `propext`、`Classical.choice`、`Quot.sound` |
 
-`Vec.get_zero` は、`rfl` だけで証明したのに `propext` に依存している。`Vec.get` のパターン照合（`⟨0, _⟩` と `⟨i + 1, h⟩`）を Lean が内部の項に翻訳するときに、この公理を使う補題が入ったものと考えられる（未確認の推定。詳しい仕組みは確かめていない）。最後の 2 つの `decide` の定理は、判定に使う `Decidable` のインスタンスが `allNonneg_iff` の証明を使っているので、その公理への依存を引き継いでいる。
+`Vec.get_zero` は、`rfl` だけで証明したのに `propext` に依存している。`propext` は `Vec.get` からではなく、命題の右辺に現れる `Vec.head` から来ている。`Vec.head` の場合分け（`nil` の場合を省いたもの）を Lean は補助の定義 `Vec.head.match_1` に翻訳し、その中で長さの等式 `n + 1 = m + 1` から `n = m` を導く補題 `Nat.Internal.elimOffset` が `propext` に依存している（2026-11-10 に `#print axioms` で確かめた。`Vec.head` を使わずに同じ内容を述べた定理は、どの公理にも依存しない。第4章）。最後の 2 つの `decide` の定理は、判定に使う `Decidable` のインスタンスが `allNonneg_iff` の証明を使っているので、その公理への依存を引き継いでいる。
 
 ## 金融数学への接続
 

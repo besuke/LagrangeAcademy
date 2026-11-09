@@ -56,3 +56,17 @@ import LagrangeAcademy
 #print axioms LagrangeAcademy.Ch03.PayoffTree.allNonneg_iff
 #print axioms LagrangeAcademy.Ch03.PayoffTree.example_allNonneg
 #print axioms LagrangeAcademy.Ch03.PayoffTree.example_not_allNonneg
+
+-- PartI/Ch04KernelAxioms.lean (Part I, chapter 4)
+#print axioms LagrangeAcademy.Ch04.beta_delta_iota
+#print axioms LagrangeAcademy.Ch04.fun_eta
+#print axioms LagrangeAcademy.Ch04.nat_add_zero
+#print axioms LagrangeAcademy.Ch04.nat_zero_add
+#print axioms LagrangeAcademy.Ch04.and_true_eq
+#print axioms LagrangeAcademy.Ch04.zero_add_fun
+#print axioms LagrangeAcademy.Ch04.parity_zero_eq_two
+#print axioms LagrangeAcademy.Ch04.Parity.isEven_four
+#print axioms LagrangeAcademy.Ch04.someWitness_pos
+#print axioms LagrangeAcademy.Ch04.numDigits_12345_rfl
+#print axioms LagrangeAcademy.Ch04.vec_get_cons_zero
+#print axioms LagrangeAcademy.Ch04.no_free_lunch
