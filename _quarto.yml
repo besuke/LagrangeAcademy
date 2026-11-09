@@ -1,38 +1,40 @@
 project:
   type: book
   execute-dir: project
+  # previous/ holds the earlier drafts (see previous/README.md) and is not rendered
   render:
     - index.qmd
-    - intro/*.qmd
-    - chapters/*.qmd
+    - ch*.qmd
 
 lang: ja
 
 book:
-  title: "LagrangeAcademy"
-  subtitle: "金融計算の保証：Rust で書き、Lean で証明し、R で描画する"
+  title: "Leanから見た金融数学"
+  subtitle: "型理論・形式的証明から金融モデルの数値実装へ"
   author: "Eiichi Horigome"
   output-file: "lagrangeAcademy"
 
   chapters:
     - index.qmd
-    - intro/ch00_guarantee_ladder.qmd
-    - chapters/ch01_rust_finance.qmd
-    - chapters/ch02_r_calls_rust.qmd
-    - chapters/ch03_lean_models.qmd
-    - chapters/ch04_lean_proofs.qmd
-    - chapters/ch05_assumptions_and_scope.qmd
-    - chapters/ch06_no_arbitrage.qmd
-    - chapters/ch07_numeraire.qmd
-    - chapters/ch08_martingale_measure.qmd
-    - chapters/ch09_applications.qmd
+
+    - part: "第I部　なぜLeanは数学の定理を証明できるのか"
+      chapters:
+        - ch01_computation_and_proof.qmd
+        - ch02_logic_curry_howard.qmd
+        - ch03_dependent_inductive_types.qmd
+        - ch04_kernel_and_axioms.qmd
+        - ch05_theorem_proving.qmd
+        - ch06_structures_typeclasses.qmd
+        - ch07_reals_and_floats.qmd
+        - ch08_mathlib_probability.qmd
+        - ch09_ai_and_formal_proof.qmd
 
 format:
   html:
     theme: cosmo
     toc: true
     code-fold: false
-    # chapters are numbered automatically; the preface and the introduction are not
+    # chapters are numbered automatically; the preface is not
     number-sections: true
 
 execute:
