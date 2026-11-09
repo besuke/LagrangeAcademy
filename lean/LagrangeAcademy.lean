@@ -4,3 +4,4 @@ public import LagrangeAcademy.PrdcCoupon
 public import LagrangeAcademy.PrdcTerms
 public import LagrangeAcademy.PrdcContract
 public import LagrangeAcademy.PartI.Ch01ComputationProof
+public import LagrangeAcademy.PartI.Ch02LogicCurryHoward

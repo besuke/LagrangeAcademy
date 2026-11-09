@@ -1,3 +1,452 @@
 # 論理学とCurry–Howard対応
 
-【執筆予定】この章の中心の問い：なぜ命題と型、証明とプログラムが対応するのか。
+```{r}
+#| label: setup-ch02
+#| include: false
+source("R/utility_LAD.R", encoding = "UTF-8")
+```
+
+第1章では、コンピュータが確かめるのは無限個の場合ではなく、有限の対象としての証明だ、と述べた。この章では、その「有限の対象」が Lean では何なのかを説明する。答えは次の一文である。
+
+$$
+\boxed{\text{命題は型であり、証明はその型の項である}}
+$$
+
+この考え方を、命題論理、構成的論理と古典論理、述語論理の順に展開する。依存型そのものの仕組み（型が値に依存すること、帰納型、宇宙）は第3章で、カーネルと公理の詳しい意味は第4章で扱う。
+
+## 問題提起：型検査は、なぜ証明の検査になるのか
+
+プログラミング言語の型検査器は、たとえば次のことを確かめる。
+
+- `swap : α × β → β × α` という関数は、組 `(a, b)` を受け取り、組 `(b, a)` を返す。だから、型 `α × β → β × α` を持つ。
+
+一方、論理学では、次の命題を証明する。
+
+- $P \land Q \to Q \land P$：「$P$ かつ $Q$」なら「$Q$ かつ $P$」。
+
+証明は、「$P \land Q$ を仮定する。そこから $P$ と $Q$ を取り出す。$Q$ と $P$ を組み合わせて $Q \land P$ を得る」というものになる。この証明の手順は、`swap` の計算の手順と同じ形をしている。組を受け取り、2 つに分け、逆の順に組み直す。
+
+これは偶然ではない。論理の推論規則と型の規則は、細部まで対応している。その対応を **Curry–Howard 対応**という。この対応があるから、型検査器は証明の検査器として働く。第1章で見た Lean の `rfl`、`decide`、帰納法による証明は、どれも、ある型を持つ項だったのである。
+
+## 数学的背景
+
+### 自然演繹
+
+**自然演繹**は、Gentzen が 1934〜35 年に導入した証明の体系である。第1章の形式体系（公理から式の列を作る方式）と違い、自然演繹では、仮定を置いて推論し、あとで仮定を解消する。人が実際に書く証明に近い。
+
+自然演繹で扱う基本の主張は、次の形の**判断**である。
+
+$$
+\Gamma \vdash P
+$$
+
+これは「仮定の集まり $\Gamma$ のもとで、命題 $P$ が導ける」と読む。論理記号ごとに、次の 2 種類の規則がある。
+
+- **導入規則**：その記号を持つ命題を、どう証明するか
+- **除去規則**：その記号を持つ命題を、どう使うか
+
+命題論理の主な規則は、次のとおりである。横線の上が前提、下が結論である。
+
+**含意 $\to$**
+
+$$
+\frac{\Gamma, P \vdash Q}{\Gamma \vdash P \to Q}\ (\to\mathrm{I})
+\qquad
+\frac{\Gamma \vdash P \to Q \qquad \Gamma \vdash P}{\Gamma \vdash Q}\ (\to\mathrm{E})
+$$
+
+$P$ を仮定して $Q$ が導けたら、仮定 $P$ を解消して $P \to Q$ を得る（導入）。$P \to Q$ と $P$ から $Q$ を得る（除去。第1章のモーダス・ポネンス）。
+
+**連言 $\land$**
+
+$$
+\frac{\Gamma \vdash P \qquad \Gamma \vdash Q}{\Gamma \vdash P \land Q}\ (\land\mathrm{I})
+\qquad
+\frac{\Gamma \vdash P \land Q}{\Gamma \vdash P}\ (\land\mathrm{E}_1)
+\qquad
+\frac{\Gamma \vdash P \land Q}{\Gamma \vdash Q}\ (\land\mathrm{E}_2)
+$$
+
+**選言 $\lor$**
+
+$$
+\frac{\Gamma \vdash P}{\Gamma \vdash P \lor Q}\ (\lor\mathrm{I}_1)
+\qquad
+\frac{\Gamma \vdash Q}{\Gamma \vdash P \lor Q}\ (\lor\mathrm{I}_2)
+\qquad
+\frac{\Gamma \vdash P \lor Q \qquad \Gamma, P \vdash R \qquad \Gamma, Q \vdash R}{\Gamma \vdash R}\ (\lor\mathrm{E})
+$$
+
+選言の除去は、場合分けである。$P$ の場合にも $Q$ の場合にも $R$ が導けるなら、$P \lor Q$ から $R$ が導ける。
+
+**偽 $\bot$**
+
+$$
+\frac{\Gamma \vdash \bot}{\Gamma \vdash R}\ (\bot\mathrm{E})
+$$
+
+$\bot$（偽）には導入規則がない。除去規則は「偽からは何でも導ける」（爆発律）である。否定は $\neg P :\equiv P \to \bot$ と定義する。
+
+### 単純型付きλ計算
+
+プログラムの側にも、同じ形の体系がある。**単純型付きλ計算**（Church, 1940）である。型は、基本の型から、関数型 $A \to B$、積型 $A \times B$、直和型 $A + B$、要素のない空の型 $0$ などで組み立てる。
+
+主張は次の形の**型付け判断**である。
+
+$$
+\Gamma \vdash t : A
+$$
+
+これは「変数の型の宣言 $\Gamma$ のもとで、項 $t$ は型 $A$ を持つ」と読む。関数の規則は次のとおりである。
+
+$$
+\frac{\Gamma, x : A \vdash t : B}{\Gamma \vdash \lambda x.\,t : A \to B}\ (\text{関数の作成})
+\qquad
+\frac{\Gamma \vdash f : A \to B \qquad \Gamma \vdash a : A}{\Gamma \vdash f\,a : B}\ (\text{関数の適用})
+$$
+
+自然演繹の含意の規則から、項の部分（$t :$、$f :$ など）を消すと、そのまま同じ形になる。組の作成と射影は連言の規則に、直和の値の作成と場合分けは選言の規則に対応する。
+
+### Curry–Howard 対応
+
+この対応をまとめると、次の表になる。
+
+| 論理 | 型 | Lean での書き方 |
+|---|---|---|
+| 命題 $P$ | 型 $P$ | `P : Prop` |
+| $P$ の証明 | 型 $P$ の項 | `h : P` |
+| $P \to Q$ | 関数型 | `P → Q`、証明は `fun hp => …` |
+| $P \land Q$ | 積型（組） | `P ∧ Q`、証明は `⟨hp, hq⟩`、使うときは `.1`、`.2` |
+| $P \lor Q$ | 直和型 | `P ∨ Q`、証明は `Or.inl hp` か `Or.inr hq`、使うときは場合分け |
+| $\bot$ | 空の型 | `False`。値を作る方法がない |
+| $\top$ | 要素が 1 つの型 | `True`。値は `trivial` |
+| $\neg P$ | $P \to \bot$ | `¬P`。定義は `P → False` |
+| $\forall x,\ P(x)$ | 依存関数型 | `∀ x, p x`、証明は `fun x => …` |
+| $\exists x,\ P(x)$ | 依存和型（証人と証明の組） | `∃ x, p x`、証明は `⟨x, hx⟩` |
+
+対応は、規則の形だけでなく、**計算**にも及ぶ。証明の中で、導入規則で作ったものを直後に除去規則で使うのは、回り道である。たとえば、$P$ を仮定して $P$ を返す関数（$P \to P$ の証明）を作り、それをすぐに $P$ の証明 $h$ に適用するのは、最初から $h$ を使うのと同じである。証明の回り道を除く操作（Prawitz による証明の正規化）は、λ計算の計算規則（β簡約：$(\lambda x.\,t)\,a$ を、$t$ の $x$ に $a$ を代入したものに置き換える）に対応する。
+
+歴史的には、Curry が 1934 年に組合せ論理の型と Hilbert 流の公理との対応に気づき、Howard が 1969 年の手稿（1980 年に出版）で自然演繹と型付きλ計算の対応を示した。同じころ、de Bruijn は Automath で、証明を型付きの項として扱う体系を独立に作っていた。Martin-Löf は 1970 年代に、この対応を述語論理まで広げる型理論を作った。依存型の仕組みは第3章で扱う。
+
+### 構成的論理：BHK 解釈
+
+Curry–Howard 対応では、証明は「作れるもの」である。この見方は、**構成的論理**（直観主義論理）の考え方と一致する。Brouwer、Heyting、Kolmogorov にちなむ **BHK 解釈**は、各命題の証明が何であるかを次のように説明する。
+
+- $P \land Q$ の証明は、$P$ の証明と $Q$ の証明の組である。
+- $P \lor Q$ の証明は、$P$ の証明か $Q$ の証明のどちらかと、どちらであるかの印である。
+- $P \to Q$ の証明は、$P$ の証明を $Q$ の証明に変える方法である。
+- $\bot$ には証明がない。
+- $\exists x,\ P(x)$ の証明は、具体的な $x$（**証人**）と、$P(x)$ の証明の組である。
+- $\forall x,\ P(x)$ の証明は、各 $x$ について $P(x)$ の証明を返す方法である。
+
+この読み方では、$P \lor \neg P$ の証明は、$P$ と $\neg P$ のどちらが成り立つかを示すことを含む。すべての命題 $P$ について一様にそれを示す方法は、第1章で見た決定不能性を考えると期待できない。実際、構成的論理では、排中律 $P \lor \neg P$ は一般には証明できないことが知られている（証明できないことは、Kripke モデルなどを使った、体系の外からの議論で示す）。
+
+それでも、構成的論理で証明できることは多い。たとえば、排中律の二重否定 $\neg\neg(P \lor \neg P)$ は、構成的に証明できる（次の節の `not_not_em`）。命題論理については、もっと一般に次の定理がある（Glivenko, 1929）：古典論理で証明できる命題 $P$ について、$\neg\neg P$ は構成的論理で証明できる。
+
+### 古典論理
+
+**古典論理**は、構成的論理に排中律 $P \lor \neg P$（または、それと同値な二重否定の除去 $\neg\neg P \to P$）を加えたものである。普通の数学の教科書の証明は、古典論理で書かれている。背理法（「$P$ でないと仮定して矛盾を導き、$P$ を結論する」）は二重否定の除去であり、古典論理の推論である。
+
+Lean は、構成的な型理論の上に作られている。そのうえで、古典論理も使えるようにしてある。Lean 本体では、排中律は公理としては置かれていない。選択公理 `Classical.choice` などの公理から、定理 `Classical.em` として導かれる（Diaconescu の定理。Lean 4.35.0 のソース `src/lean/Init/Classical.lean` では、選択公理、関数の外延性、命題の外延性から証明している）。そのため、古典論理を使った証明は `Classical.choice` に依存する。この依存は `#print axioms` で見える（後の「検証」の節）。公理の意味は第4章で扱う。
+
+この本は、古典論理を禁じない。ただし、どの証明が古典論理を使っているかを区別する。この区別は、金融数学でも意味を持つ（この章の最後の節）。
+
+### 述語論理と依存型
+
+述語論理では、変数を含む命題 $P(x)$ と、量化子 $\forall$、$\exists$ を扱う。Curry–Howard 対応では、次のようになる。
+
+- $\forall x : \alpha,\ P(x)$ の証明は、各 $x$ を受け取って $P(x)$ の証明を返す関数である。返す値の**型が引数 $x$ に依存する**ので、普通の関数型ではなく**依存関数型**になる。
+- $\exists x : \alpha,\ P(x)$ の証明は、証人 $x$ と $P(x)$ の証明の組である。2 つ目の成分の型が 1 つ目の成分に依存するので、**依存和型**になる。
+
+ここで、論理学の教科書との小さな、しかし大事な違いがある。古典的な一階述語論理では、ふつう**議論の領域は空でない**と約束する。そのため、$\forall x,\ P(x) \to \exists x,\ P(x)$ は恒真である。型理論では、型 $\alpha$ は空でもよい。$\exists x,\ P(x)$ を証明するには証人が必要なので、$\alpha$ の要素が 1 つ手元にない限り、この含意は証明できない。実際、要素のない型では偽になる（次の節）。
+
+Lean の `∃` についての注意を 1 つ書いておく。Lean の `∃` は命題（`Prop`）であり、その証明から証人を取り出して、データ（数値やプログラム）の計算に使うことはできない。証明の中で別の命題を示すためには使える。この制限の理由は、`Prop` の性質として第3章と第4章で扱う。
+
+## Lean による説明
+
+コードは、すべて Lean が検査したファイル `lean/LagrangeAcademy/PartI/Ch02LogicCurryHoward.lean` から読み込んで示す。この章では、タクティク（`by …`）をほとんど使わず、証明の項を直接書く。項がそのまま証明であることを見るためである。タクティクは第5章で扱う。
+
+### 含意は関数である
+
+```{r}
+#| label: lean-imp-self
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "imp_self")
+```
+
+`fun hp => hp` は「`hp` を受け取って `hp` を返す関数」、つまり恒等関数である。型は `P → P` で、これがそのまま命題 $P \to P$ の証明になる。`hp` は「$P$ の証明」を表す変数の名前で、`h` は仮定（hypothesis）の頭文字として慣習的に使う。
+
+```{r}
+#| label: lean-imp-trans
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "imp_trans")
+```
+
+$P \to Q$ と $Q \to R$ から $P \to R$ を得る推論は、関数の合成である。`hpq hp` は「関数 `hpq` を `hp` に適用する」で、含意の除去規則にあたる。
+
+### 連言は組である：証明とプログラム
+
+```{r}
+#| label: lean-and-swap
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "and_swap")
+```
+
+```{r}
+#| label: lean-swap-pair
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "swapPair")
+```
+
+上が命題 $P \land Q \to Q \land P$ の証明で、下が組の順序を入れ替えるプログラムである。`⟨hp, hq⟩` は組を分ける（連言の除去）書き方で、`⟨hq, hp⟩` は組を作る（連言の導入）書き方である。2 つの違いは、引数が命題（`P Q : Prop`）か、データの型（`α β : Type`）かだけである。
+
+Lean の `#print` で、2 つの項を表示させると次のようになる（2026-11-10 に `lake env lean scripts/ch02_checks.lean` で実行した結果の一部。確認用のスクリプトは後で示す）。
+
+```text
+theorem LagrangeAcademy.Ch02.and_swap : ∀ (P Q : Prop), P ∧ Q → Q ∧ P :=
+fun P Q x =>
+  match x with
+  | ⟨hp, hq⟩ => ⟨hq, hp⟩
+def LagrangeAcademy.Ch02.swapPair : (α β : Type) → α × β → β × α :=
+fun α β x =>
+  match x with
+  | (a, b) => (b, a)
+```
+
+2 つの項は同じ形をしている。違いは、`swapPair` は計算に使え、`#eval swapPair Nat String (1, "a")` が `("a", 1)` を返すことである。`and_swap` は、証明として型検査されるために存在する。
+
+### 選言は場合分けである
+
+```{r}
+#| label: lean-or-swap
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "or_swap")
+```
+
+`P ∨ Q` の証明は、`Or.inl hp`（左の $P$ の証明）か `Or.inr hq`（右の $Q$ の証明）のどちらかである。`match` は、どちらの場合かで処理を分ける。これは選言の除去規則で、プログラムでは直和型の場合分けにあたる。
+
+### カリー化
+
+```{r}
+#| label: lean-and-imp-iff
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "and_imp_iff")
+```
+
+「$P$ かつ $Q$ なら $R$」と「$P$ なら、$Q$ なら $R$」は同値である。プログラムでは、2 つの引数を組で受け取る関数と、1 つずつ受け取る関数の変換（カリー化）にあたる。`↔` の証明は、2 つの向きの関数の組 `⟨→ の証明, ← の証明⟩` である。
+
+### 偽と否定
+
+```{r}
+#| label: lean-false-elim
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "false_elim")
+```
+
+`False` は値を持たない型である。`nomatch h` は「`h` の場合分けをするが、場合が 1 つもない」という意味で、どんな型の値としても受け付けられる。これが爆発律である。
+
+```{r}
+#| label: lean-not-not-intro
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "not_not_intro")
+```
+
+`¬¬P` は `(P → False) → False` である。`hp : P` と `hnp : P → False` を受け取り、`hnp hp : False` を返す。$P \to \neg\neg P$ は構成的に証明できる。逆向きの $\neg\neg P \to P$ は、次の節で見るとおり古典論理を要する。
+
+### 構成的な証明と古典的な証明
+
+```{r}
+#| label: lean-not-not-em
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "not_not_em")
+```
+
+排中律の二重否定は、古典論理なしで証明できる。`h : ¬(P ∨ ¬P)` を仮定して矛盾を導く。$P$ を仮定すると `Or.inl` で $P \lor \neg P$ が作れて `h` と矛盾するので、`¬P` が得られる。すると `Or.inr` で $P \lor \neg P$ が作れて、また `h` と矛盾する。
+
+```{r}
+#| label: lean-em
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "em")
+```
+
+```{r}
+#| label: lean-of-not-not
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "of_not_not")
+```
+
+排中律そのものは `Classical.em` から得る。二重否定の除去は、排中律で $P$ と $\neg P$ に場合を分けて示す。$\neg P$ の場合は、仮定 `h : ¬¬P` と矛盾する（`False.elim` は爆発律）。
+
+### 述語論理
+
+```{r}
+#| label: lean-forall-and-split
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "forall_and_split")
+```
+
+全称命題の証明 `h` は関数である。`h x` は「$x$ についての証明」で、その `.1` と `.2` が $p\,x$ と $q\,x$ の証明である。
+
+```{r}
+#| label: lean-exists-imp
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "exists_imp")
+```
+
+存在命題の証明は組 `⟨x, hx⟩` である。証人 `x` を取り出し、`hpq x hx` で $q\,x$ の証明に変えて、新しい組を作る。
+
+```{r}
+#| label: lean-not-exists-iff
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "not_exists_iff")
+```
+
+「$p\,x$ となる $x$ は存在しない」と「すべての $x$ で $p\,x$ は成り立たない」は、構成的に同値である。この定理は、最後の節で裁定の定義に使う。
+
+```{r}
+#| label: lean-exists-of-forall
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "exists_of_forall")
+```
+
+```{r}
+#| label: lean-not-forall-imp-exists-empty
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "not_forall_imp_exists_empty")
+```
+
+要素 `a : α` が 1 つあれば、「すべての $x$ で成り立つ」から「ある $x$ で成り立つ」が出る。証人として `a` を使えばよい。一方、要素のない型 `Empty` では、「すべての $x$ で偽」は空虚に真だが（場合が 1 つもない）、「偽となる $x$ がある」は偽である。そのため、含意全体が偽になる。`x.elim` は、`Empty` の値 `x` から何でも導く（`False` の場合と同じ）。
+
+### Lean が受け付けない例
+
+次のスクリプト `lean/scripts/ch02_checks.lean` の最後の 3 つは、Lean が受け付けない例である。
+
+```{r}
+#| label: lean-ch02-checks
+#| echo: false
+#| output: asis
+show_lean_script_LAD("ch02_checks")
+```
+
+`lean/` で `lake env lean scripts/ch02_checks.lean` を実行した結果のうち、エラーの部分は次のとおりである（2026-11-10 に実行。ファイルの場所の表示は短くした。`#eval` と `#print` の結果は前に示した）。
+
+```text
+ch02_checks.lean:20:9: error: don't know how to synthesize placeholder for argument `h`
+context:
+P : Prop
+⊢ P
+ch02_checks.lean:24:2: error: Expected type must not contain free variables
+  P ∨ ¬P
+
+Hint: Use the `+revert` option to automatically clean up and revert free variables
+ch02_checks.lean:28:8: error: don't know how to synthesize placeholder for argument `x`
+context:
+α : Type
+p : α → Prop
+h : ∀ (x : α), p x
+⊢ α
+ch02_checks.lean:28:3: error: don't know how to synthesize placeholder for argument `w`
+context:
+α : Type
+p : α → Prop
+h : ∀ (x : α), p x
+⊢ α
+```
+
+- **`Or.inl _` で排中律を示そうとした例**（20 行目）：`_` は「ここに入る項を Lean に推測させる」という書き方である。Lean は、ここに $P$ の証明が必要だが、それを作れないと報告する（`⊢ P` は「示すべきものは $P$」の意味）。手元にあるのは命題 `P` だけで、その証明はない。ただし、この失敗は「排中律が構成的に証明できない」ことの証明ではない。第1章で見たとおり、項が見つからないことは命題が証明できないことを意味しない。証明できないことは、体系の外の議論で示す。
+- **`decide` で排中律を示そうとした例**（24 行目）：`decide` は、命題の真偽を計算して判定する（第1章）。ここでの命題は、任意の命題 `P` を変数として含む。Lean は「示すべき型に自由変数が含まれてはならない」と報告する。中身の分からない `P` の真偽は、計算のしようがない。
+- **要素の存在を仮定せずに「すべて」から「ある」を導こうとした例**（28 行目）：証人の位置の `_` に入る、型 `α` の値が作れない（`⊢ α`）。`α` が空かもしれないからである。同じ位置について、引数の名前 `x` と `w` で 2 回報告されている。
+
+## 検証
+
+この章のライブラリの定理について、この本の合格条件（`lake build` が警告なしで通り、依存する公理が `propext`、`Classical.choice`、`Quot.sound` の 3 つ以内であること）を確かめた。2026-11-10 に `lean/` で `lake build` と `lake env lean scripts/print_axioms.lean` を実行した結果は、次のとおりである。
+
+| 定理 | 内容 | 依存する公理 |
+|---|---|---|
+| `imp_self`、`imp_trans` | 含意 | なし |
+| `and_swap`、`or_swap`、`and_imp_iff` | 連言、選言、カリー化 | なし |
+| `false_elim`、`not_not_intro` | 偽、否定 | なし |
+| `not_not_em` | 排中律の二重否定 | なし |
+| `em` | 排中律 | `propext`、`Classical.choice`、`Quot.sound` |
+| `of_not_not` | 二重否定の除去 | `propext`、`Classical.choice`、`Quot.sound` |
+| `forall_and_split`、`exists_imp`、`not_exists_iff` | 全称と存在 | なし |
+| `exists_of_forall`、`not_forall_imp_exists_empty` | 空でない型と空の型 | なし |
+| `noArbitrage_iff_forall`、`not_noArbitrage_of_exists` | 無裁定の言い換え（次の節） | なし |
+| `exists_arbitrage_of_not_noArbitrage` | 「無裁定でない」から裁定の存在へ（次の節） | `propext`、`Classical.choice`、`Quot.sound` |
+
+古典論理を使った 3 つの定理だけが、3 つの公理に依存している。ほかの定理は、どの公理にも依存しない。`#print axioms` は、証明が古典論理を使ったかどうかを見分ける道具にもなる。
+
+第1章と同じく、この表が保証するのは Lean の中の命題が証明されたことだけである。たとえば、次の節の `IsArbitrage` の定義が、金融で言う裁定を正しく表しているかは、人が確かめる。
+
+## 金融数学への接続
+
+序文と第1章で述べた裁定を、論理式として書いてみる。1 期間の市場を考え、戦略（ポートフォリオ）の集まりを型 $\Theta$、満期に起こりうる状態の集まりを型 $\Omega$ とする。戦略 $\theta$ の今日の費用を $\mathrm{cost}(\theta)$、状態 $\omega$ での満期の支払いを $\mathrm{payoff}(\theta, \omega)$ とする。ここでは Lean 本体だけを使うため、価格を整数とした。
+
+戦略 $\theta$ が**裁定**であるとは、次が成り立つことである。
+
+$$
+\mathrm{cost}(\theta) \le 0
+\ \land\
+\bigl(\forall \omega,\ 0 \le \mathrm{payoff}(\theta, \omega)\bigr)
+\ \land\
+\bigl(\mathrm{cost}(\theta) < 0 \ \lor\ \exists \omega,\ 0 < \mathrm{payoff}(\theta, \omega)\bigr)
+$$
+
+元手をかけず、どの状態でも損をせず、今日の受け取りがあるか、ある状態では利益がある。**無裁定**とは、裁定になる戦略が存在しないこと、つまり $\neg \exists \theta,\ \mathrm{IsArbitrage}(\theta)$ である。
+
+```{r}
+#| label: lean-is-arbitrage
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "IsArbitrage")
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "NoArbitrage")
+```
+
+この定義は、連言・選言・全称・存在・否定をすべて使う。Curry–Howard 対応で読むと、「戦略 $\theta$ が裁定である」ことの証明は、次の 3 つの組である。
+
+1. 費用が 0 以下であることの証明
+2. 各状態で支払いが非負であることを示す関数
+3. 「費用が負」か「支払いが正になる状態 $\omega$ とその証明」のどちらか
+
+次の 3 つの定理は、無裁定の言い換えである。
+
+```{r}
+#| label: lean-no-arbitrage-iff
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "noArbitrage_iff_forall")
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "not_noArbitrage_of_exists")
+show_lean_declaration_LAD("PartI/Ch02LogicCurryHoward", "exists_arbitrage_of_not_noArbitrage")
+```
+
+- `noArbitrage_iff_forall`：「裁定が存在しない」と「どの戦略も裁定ではない」は同値である。前の節の `not_exists_iff` をそのまま当てはめた。古典論理は使わない。
+- `not_noArbitrage_of_exists`：裁定になる戦略を 1 つ示せば、無裁定ではない。古典論理は使わない。
+- `exists_arbitrage_of_not_noArbitrage`：逆向き、「無裁定でない」から「裁定になる戦略が存在する」を導く。$\neg\neg\exists \theta,\ \ldots$ から $\exists \theta,\ \ldots$ を得るので、二重否定の除去（古典論理）を使う。
+
+最後の定理の意味は、金融では重要である。この証明は「裁定になる戦略がある」ことを示すが、**それがどの戦略かは示さない**。構成的な証明であれば、証人として具体的な戦略が手に入る。BHK 解釈でいえば、$\exists$ の証明は証人を含むからである。古典論理で示した存在は、証人を与えない。実務で裁定を示すときは、具体的なポートフォリオを組んでみせる。それは構成的な証明の形である。
+
+この章では、戦略の型 $\Theta$ も、費用と支払いの関数も、抽象的なままにした。実際の市場では、戦略は資産の保有量の組であり、費用と支払いは保有量について線形である。そうした構造を Lean の構造体と型クラスで書くのは第6章、市場の定義から無裁定の定理を導くのは第II部である。また、無裁定を市場の定義に組み込むか、市場についての命題として別に書くか、という設計の問題も第6章で扱う。この章の書き方は後者で、無裁定でない市場も書ける。
+
+## 演習
+
+1. $(P \to Q) \to (\neg Q \to \neg P)$（対偶）を、古典論理を使わずに項で証明せよ。逆向きの $(\neg Q \to \neg P) \to (P \to Q)$ は、`of_not_not` を使って証明せよ。`#print axioms` で、2 つの証明が依存する公理を比べよ。
+2. Peirce の法則 $((P \to Q) \to P) \to P$ を、`em` を使って証明せよ。この法則を構成的に証明しようとすると、どこで詰まるかを述べよ。
+3. 定理 `and_imp_iff` に対応するプログラムとして、型 `α × β → γ` の関数と型 `α → β → γ` の関数を互いに変換する 2 つの関数を、Lean の `def` で書け。
+4. $\neg(\forall x,\ p\,x) \to \exists x,\ \neg p\,x$ を、古典論理を使って証明せよ。逆向きの $(\exists x,\ \neg p\,x) \to \neg(\forall x,\ p\,x)$ は、古典論理なしで証明せよ。
+5. 「強い裁定」を、費用が負で、どの状態でも支払いが非負である戦略と定義する。強い裁定は `IsArbitrage` の意味での裁定であることを証明せよ。そこから、`NoArbitrage` が成り立てば強い裁定は存在しないことを導け。どちらの証明でも古典論理が要らないことを、`#print axioms` で確かめよ。
