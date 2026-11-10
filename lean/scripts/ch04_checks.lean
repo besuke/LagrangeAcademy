@@ -34,7 +34,16 @@ def rejected_pick (h : Nonempty Nat) : Nat := Classical.choice h
 -- 7. noncomputable な定義は実行できない
 #eval someWitness ⟨1, Nat.one_pos⟩
 
--- 8. axiom を置くと、その名前が #print axioms に現れる。偽の axiom からは False が導ける
+-- 8. Prop は非可述的：すべての命題についての命題も Prop に入る。Type についての同じ形は 1 つ上の宇宙に入る
+#check (∀ p : Prop, p → p)
+#check (∀ α : Type, α → α)
+
+-- 9. native_decide は、計算の結果を新しい公理として受け入れる。decide と比べる
+theorem sum_range_ten_native : (List.range 10).foldl (· + ·) 0 = 45 := by native_decide
+#print axioms sum_range_ten_decide
+#print axioms sum_range_ten_native
+
+-- 10. axiom を置くと、その名前が #print axioms に現れる。偽の axiom からは False が導ける
 axiom bogusNoArbitrage : NoArbitrage Unit Unit (fun _ => -1) (fun _ _ => 0)
 
 theorem false_from_bogus : False :=

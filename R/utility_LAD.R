@@ -134,7 +134,11 @@ show_lean_declaration_LAD <- function(name, declaration) {
   }
 
   text <- readLines(path, encoding = "UTF-8", warn = FALSE)
-  pattern <- paste0("^(theorem|lemma|def|abbrev|structure|inductive|class|instance) ", declaration, "( |$)")
+  # modifiers such as noncomputable or an attribute may come before the keyword
+  pattern <- paste0(
+    "^(@\\[[^]]*\\] )?((noncomputable|private|protected|partial|unsafe) )*",
+    "(theorem|lemma|def|abbrev|structure|inductive|class|instance) ", declaration, "( |$)"
+  )
   start <- which(grepl(pattern, text))[1]
 
   if (is.na(start)) {
@@ -147,6 +151,12 @@ show_lean_declaration_LAD <- function(name, declaration) {
   first <- start
   if (start > 1L && grepl("-/\\s*$", text[start - 1L])) {
     first <- max(which(grepl("^/--", text[seq_len(start - 1L)])))
+  }
+
+  # commands that scope over the declaration (`unseal f in`, `set_option o v in`) belong to it:
+  # without them the code shown would not check as it stands
+  while (first > 1L && grepl("^(unseal|set_option|open|attribute|variable|omit|include) .* in\\s*$", text[first - 1L])) {
+    first <- first - 1L
   }
 
   show_source_LAD(path, "lean", first:end)

@@ -1,3 +1,318 @@
 # Leanのカーネルと公理
 
-【執筆予定】この章の中心の問い：Leanが証明を受け入れたとき、何が保証されるのか。
+```{r}
+#| label: setup-ch04
+#| include: false
+source("R/utility_LAD.R", encoding = "UTF-8")
+```
+
+この章の問いは、**Lean が証明したというとき、私たちは何を信頼しているのか**である。第1〜3章で先送りにした点に、次の順で答える。
+
+1. 定義上の等式と命題としての等式：`rfl` は何を検査するのか。
+2. カーネルとエラボレータ：どこまでが信頼の基盤なのか。
+3. 証明の無関係性と `Prop` の役割。
+4. `propext`、`Classical.choice`、`Quot.sound` の意味。
+5. `native_decide` と、外部の計算結果の信頼性。
+6. 整礎再帰と、`Vec.get_zero` の公理への依存の調査。
+7. 金融数学への接続：計算結果を信頼することと、モデルの仮定を信頼することの違い。
+
+最後の項で、Lean の論理的な信頼の基盤と、金融モデルの経済的な前提を分ける。この区別が、第II部の無裁定価格理論への入り口になる。
+
+## 問題提起
+
+第1章では、「発見」（項を組み立てる）と「検証」（カーネルが型検査する）を分けた。これが正しければ、信頼するのはカーネルだけのはずである。しかし実際には、次のものも信頼している。
+
+- **公理**：証明されずに認められる主張。偽の公理を 1 つ置けば、何でも証明できる。
+- **カーネルの実装**：カーネルもプログラムであり、誤りがありうる。
+- **カーネルを迂回する計算**：`native_decide` のように、計算の結果を公理として受け入れる仕組み。
+- **命題そのもの**：カーネルは「この項がこの型を持つ」ことを確かめるだけで、その型が意図を表しているかは確かめない。
+
+## 数学的背景
+
+### 定義上の等式と命題としての等式
+
+- **定義上の等式**：2 つの項が、計算規則で同じ形になること。命題ではなく、カーネルが型検査の中で判定する関係である。
+- **命題としての等式**：型 `a = b`。帰納型 `Eq` で、構成子は `Eq.refl a : a = a` だけである。
+
+`rfl` は型 `a = a` を持つ。これが `a = b` の証明として通るのは、カーネルが `a` と `b` を定義上等しいと判定したときである。つまり **`rfl` は、両辺が定義上等しいかをカーネルに判定させる証明**である。
+
+主な計算規則は、β 簡約（関数の適用）、δ 簡約（定義の展開）、ι 簡約（構成子に対する場合分けの計算）、ζ 簡約（`let` の代入）、η（`fun x => f x` と `f` を同一視）である。これに、次の節の証明の無関係性が加わる。
+
+`n + 0 = n` は、足し算が 2 つ目の引数についての再帰なので ι 簡約で閉じる。`0 + n = n` は、`n` が変数のままでは計算が進まず、帰納法が要る。**どの等式が定義上の等式になるかは、定義の書き方で決まる。**
+
+理論上の注意：Lean の型理論での定義上の等式の判定は、一般には決定不能であることが知られている（M. Carneiro, "The Type Theory of Lean", 2019）。カーネルの手続きは、定義上等しいものを常に等しいと判定できるとは限らない。ただし、判定できなければ受け付けないだけで、等しくないものを誤って受け付けるわけではない。
+
+### カーネルとエラボレータ
+
+Lean のファイルは、次の順に処理される。
+
+1. 構文解析
+2. エラボレーション：省略した引数の推論、型クラスの探索、タクティクの実行、再帰やパターン照合の翻訳
+3. カーネルによる型検査
+
+- **信頼の基盤**：カーネルの実装（C++）、公理、カーネルに組み込まれた計算（自然数の数値の演算など）。厳密には、それを動かすコンパイラ、OS、ハードウェアも含む。
+- **信頼しなくてよい部分**：エラボレータ、タクティク（`simp`、`grind`、`omega` など）、人や AI。誤った項を作れば、カーネルが拒否する。
+
+カーネルの実装の誤りには、**別の検査器**で検査し直すことで備えられる。Lean 4.35.0 のツールチェーンには `leanchecker`（<https://github.com/leanprover/lean4checker>）が含まれている。Rust で書かれた独立した実装 nanoda（<https://github.com/ammkrn/nanoda_lib>）もある。
+
+### 証明の無関係性と `Prop` の役割
+
+`Prop` は命題の宇宙である。命題 `p : Prop` の要素が、`p` の証明である。`Prop` には、`Type` にはない 3 つの性質がある。
+
+- **証明の無関係性**：同じ命題の 2 つの証明は、定義上等しい。カーネルは、証明の中身を区別しない。そのため、部分型 `{n : Nat // 0 < n}` の要素は、値が同じなら、添えた証明が違っても等しい。
+- **非可述性**：「すべての命題について」と量化した命題も `Prop` に入る。`∀ p : Prop, p → p` は `Prop` である。同じ形を `Type` で書いた `∀ α : Type, α → α` は、1 つ上の宇宙 `Type 1` に入る。
+- **データを取り出せない**：命題の証明から、データ（`Type` の要素）を計算で取り出すことは、原則として許されない。第3章で、`∃ n, P n` の証明から `n` を取り出す定義が拒否されたのはこのためである。
+
+3 つ目は、1 つ目から必然的に出てくる制約である。`∃ n, 0 < n` の証明として、`n = 1` を証人にしたものと `n = 2` を証人にしたものがあるとする。証明の無関係性によって、2 つは定義上等しい。そこから証人を計算で取り出せたら、等しいものから 1 と 2 という違う値が出てしまう。次の節の `Classical.choice` は、この制約を、計算できない形で破る公理である。
+
+### 3 つの公理
+
+どれも Lean 本体で `axiom` として宣言されている（Lean 4.35.0 のソースの `src/lean/Init/Core.lean` と `src/lean/Init/Prelude.lean`）。
+
+- **`propext`**：$(a \leftrightarrow b) \to a = b$。同値な命題は等しい。`simp` などの書き換えは、同値による書き換えにこの公理を使う。
+- **`Quot.sound`**：商型 `Quot r` で、$r\,a\,b$ なら `Quot.mk r a = Quot.mk r b`。商型の作り方（`Quot.mk`）と、その上の関数の作り方（`Quot.lift`）はカーネルの基本の仕組みで、公理なのはこの等式だけである。関数の外延性 `funext` は、これから導かれる定理である。Mathlib の実数 `ℝ` も商型を使って作られている（第7章）。
+- **`Classical.choice`**：$\mathtt{Nonempty}\ \alpha \to \alpha$。空でない型から要素を 1 つ取り出す。前の節の「`Prop` からデータは取り出せない」という制約を、計算できない形で破る。この公理を使う定義には `noncomputable` が要る。排中律はこの公理から導かれる（第2章）。
+
+この 3 つを加えた型理論が矛盾しないことは、ZFC に到達不能基数を加えた集合論の中にモデルを作ることで、相対的に示されている（同じ Carneiro の論文による）。Mathlib もこの 3 つの上に作られている。この本の合格条件が、依存する公理をこの 3 つに限るのはそのためである。
+
+### `native_decide` と外部の計算
+
+| 方法 | 計算するもの | 結果の扱い |
+|---|---|---|
+| `decide` | カーネル | カーネルが検査した証明になる |
+| `#eval` | コンパイルしたプログラム | 表示されるだけで、証明にはならない |
+| `native_decide` | コンパイルしたプログラム | 結果を新しい公理として受け入れる |
+
+`native_decide` では、コンパイラと実行環境が正しいことを信頼する。Lean 4.35.0 では、`native_decide` を使うたびに、その計算の結果を述べる補助の公理が新しく作られる（この章の「Lean による説明」で確かめる）。
+
+Rust や R で計算した価格を「正しい結果」として Lean に持ち込むことは、これよりさらに大きな信頼を外部に置くことにあたる。この本がそれをしないのはそのためである。
+
+### 整礎再帰と、公理への依存
+
+第3章の `numDigits` のように、構造的でない再帰（引数が減ることを証明して停止性を示す再帰）は、エラボレータが整礎再帰の項に翻訳する。翻訳された定義は既定では展開されないので、`rfl` が通らないことがある。
+
+また、定理が依存する公理は、自分が書いた証明だけから来るとは限らない。エラボレータが自動で作った補助の定義（パターン照合の翻訳など）が公理を使っていれば、それを使う定理も、その公理に依存する。どこから来たかは、`#print axioms` を補助の定義までたどって調べられる。
+
+## Lean による説明
+
+コードは、Lean が検査したファイル `lean/LagrangeAcademy/PartI/Ch04KernelAxioms.lean` から読み込んで示す。エラーや `#print` の結果は、確認用のスクリプト `lean/scripts/ch04_checks.lean`（この節の最後に示す）を 2026-11-10 に `lean/` で実行したものである。
+
+### `rfl` が閉じるものと閉じないもの
+
+```{r}
+#| label: lean-defeq
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "beta_delta_iota")
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "fun_eta")
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "nat_add_zero")
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "nat_zero_add")
+```
+
+`0 + n = n` を `rfl` で示そうとすると、Lean は「定義上の等式ではない」と報告する。
+
+```text
+ch04_checks.lean:16:0: error: Not a definitional equality: the left-hand side
+  0 + n
+is not definitionally equal to the right-hand side
+  n
+```
+
+### カーネルが受け取るもの
+
+第3章の `MyNat.zero_add` はタクティク `induction` で証明した。カーネルが受け取った項を `#print` で見ると、タクティクは消え、再帰子の項が残っている。
+
+```text
+theorem LagrangeAcademy.Ch03.MyNat.zero_add : ∀ (a : MyNat), MyNat.zero.add a = a :=
+fun a => MyNat.rec (Eq.refl (MyNat.zero.add MyNat.zero)) (fun a ih => congrArg MyNat.succ ih) a
+```
+
+タクティクは、この項を組み立てる手段にすぎない。タクティクの実装に誤りがあって誤った項を作っても、カーネルの型検査で拒否される。
+
+### 証明の無関係性と `Prop`
+
+```{r}
+#| label: lean-proof-irrel
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "proof_irrel_rfl")
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "subtype_eq_rfl")
+```
+
+どちらも `rfl` で閉じ、どの公理にも依存しない。証明の無関係性は公理ではなく、カーネルの定義上の等式の規則だからである。
+
+`Prop` の非可述性は、`#check` で宇宙を表示すると見える（確認用のスクリプトの 8）。
+
+```text
+∀ (p : Prop), p → p : Prop
+(α : Type) → α → α : Type 1
+```
+
+### 3 つの公理を 1 つずつ使う
+
+```{r}
+#| label: lean-axioms
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "and_true_eq")
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "zero_add_fun")
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "Parity")
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "parity_zero_eq_two")
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "someWitness")
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "someWitness_pos")
+```
+
+- `and_true_eq`：同値を `propext` で等式にした。
+- `zero_add_fun`：2 つの関数は定義上は等しくないが、すべての入力で値が等しいので、`funext` で等しい。確認用のスクリプトの `#print axioms funext` は `[Quot.sound]` を返す。
+- `parity_zero_eq_two`：0 と 2 は偶奇が同じなので、商型 `Parity` では等しい。
+- `someWitness`：第3章で拒否された「`∃` の証明から証人を取り出す」定義が、`Classical.choose` を使えば書ける。ただし `noncomputable` が要り、実行もできない。確認用のスクリプトでは、`noncomputable` を外した定義と、`#eval someWitness …` が拒否された。
+
+```text
+ch04_checks.lean:32:4: error(lean.dependsOnNoncomputable): `Classical.choice` not supported by code generator; consider marking definition as `noncomputable`
+ch04_checks.lean:35:0: error(lean.dependsOnNoncomputable): failed to compile definition, consider marking it as 'noncomputable' because it depends on 'someWitness', which is 'noncomputable'
+```
+
+### `decide` と `native_decide`
+
+同じ命題を、カーネルの計算（`decide`）とコンパイルしたプログラムの計算（`native_decide`）で証明して比べる。`decide` の版はライブラリにある。
+
+```{r}
+#| label: lean-decide
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "sum_range_ten_decide")
+```
+
+`native_decide` の版は、この本の合格条件（依存する公理を標準の 3 つに限る）を満たさないので、ライブラリには置かず、確認用のスクリプトの 9 に置いた。`#print axioms` の結果は次のとおりである。
+
+```text
+'LagrangeAcademy.Ch04.sum_range_ten_decide' does not depend on any axioms
+'sum_range_ten_native' depends on axioms: [sum_range_ten_native._native.native_decide.ax_1_1]
+```
+
+`native_decide` は、計算の結果を述べる公理 `sum_range_ten_native._native.native_decide.ax_1_1` を新しく作り、定理はそれに依存する。カーネルは、この公理の中身（計算が正しいこと）を検査していない。`#print axioms` は、カーネルの外に置いた信頼を、名前のついた公理として見えるようにする。
+
+### 整礎再帰と `Vec.get_zero` の公理への依存
+
+**整礎再帰の定義が展開されない理由**：`#print numDigits` の結果は次のとおりである。
+
+```text
+@[irreducible] def LagrangeAcademy.Ch03.numDigits : ℕ → ℕ :=
+WellFounded.Nat.fix (fun x => x) fun n a => if h : n < 10 then 1 else a (n / 10) ⋯ + 1
+```
+
+定義は `WellFounded.Nat.fix` を使った項に翻訳され、`@[irreducible]`（展開しない）という属性がついている。`rfl` が失敗したのは、カーネルが計算できないからではなく、エラボレータが展開を禁じているからである。`unseal numDigits in` で展開を許すと `rfl` で閉じる。
+
+```{r}
+#| label: lean-num-digits-rfl
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "numDigits_12345_rfl")
+```
+
+既定で展開しない理由は、引数が減ることの証明の計算をたどると遅くなったり進まなくなったりするため、と説明されることが多い（Lean の設計文書では確かめていない。未確認の推定）。
+
+**`Vec.get_zero` の `propext` の出どころ**：第3章では「`Vec.get` のパターン照合の翻訳による」と推定したが、一部が違っていた。確認用のスクリプトの結果は次のとおりである。
+
+```text
+'LagrangeAcademy.Ch03.Vec.head' depends on axioms: [propext]
+'LagrangeAcademy.Ch03.Vec.head.match_1' depends on axioms: [propext]
+'Nat.Internal.elimOffset' depends on axioms: [propext]
+```
+
+`propext` は、命題の右辺に現れる `Vec.head` から来ている。`Vec.head` の場合分けは、補助の定義 `Vec.head.match_1` に翻訳される。その中で、長さの等式 `n + 1 = m + 1` から `n = m` を導くのに使われる補題 `Nat.Internal.elimOffset` が、`propext` に依存している。`Vec.head` を使わない次の定理は、どの公理にも依存しない。
+
+```{r}
+#| label: lean-vec-get-cons-zero
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "vec_get_cons_zero")
+```
+
+公理への依存は、自分が書いた証明だけでなく、**エラボレータが自動で作った補助の定義**からも来る。
+
+### `axiom` を置くと何が起きるか
+
+確認用のスクリプトの全体を示す。最後の節（10）は、この本では許していない `axiom` を、何が起きるかを見るためだけに置いたものである。
+
+```{r}
+#| label: lean-ch04-checks
+#| echo: false
+#| output: asis
+show_lean_script_LAD("ch04_checks")
+```
+
+`bogusNoArbitrage` は、「今日の費用が $-1$（お金を受け取る）で満期の支払いが 0 の戦略がある市場に、裁定がない」と主張する。これは偽だが、`axiom` として置けば Lean は受け付け、そこから `False` が証明できる。
+
+```text
+'false_from_bogus' depends on axioms: [bogusNoArbitrage, propext]
+```
+
+`#print axioms` には `bogusNoArbitrage` が現れるので、この本の合格条件では不合格になる。**`axiom` はカーネルの検査をすり抜けるのではなく、信頼の基盤に自分で項目を足すもの**であり、`#print axioms` はそれを見えるようにする。`native_decide` が作る公理も、同じ仕組みで見える。
+
+## 検証
+
+2026-11-10 に `lean/` で `lake build`（警告なし）と `lake env lean scripts/print_axioms.lean` を実行した結果は、次のとおりである。
+
+| 定理 | 内容 | 依存する公理 |
+|---|---|---|
+| `beta_delta_iota`、`fun_eta`、`nat_add_zero` | 定義上の等式 | なし |
+| `nat_zero_add` | 命題としての等式 | なし |
+| `proof_irrel_rfl`、`subtype_eq_rfl` | 証明の無関係性 | なし |
+| `sum_range_ten_decide` | カーネルによる計算（`decide`） | なし |
+| `and_true_eq` | 命題の外延性 | `propext` |
+| `zero_add_fun`、`parity_zero_eq_two` | 関数の外延性、商型 | `Quot.sound` |
+| `Parity.isEven_four` | 商型の上の関数の計算 | `propext` |
+| `someWitness_pos` | 選択公理で選んだ証人 | `Classical.choice` |
+| `numDigits_12345_rfl` | 展開を許した整礎再帰 | `propext`、`Quot.sound` |
+| `vec_get_cons_zero` | `Vec.head` を使わない取り出し | なし |
+| `no_free_lunch` | 無裁定の仮定からの帰結（次の節） | `propext` |
+
+`numDigits_12345_rfl` は、`numDigits` の定義（引数が減ることの証明）の公理を引き継いでいる。`no_free_lunch` の `propext` は、証明で使った整数の補題から来ている（どの補題かは確かめていない）。
+
+ライブラリの外の確認用のスクリプトでは、`native_decide` の版が、その場で作られた補助の公理に依存することを確かめた（前の節の「`decide` と `native_decide`」）。
+
+**別の検査器による再検査**：同じ日に `lake env leanchecker <モジュール名>` で、第1章と第4章のモジュールを検査し直した。どちらも何も報告せず、終了コード 0 で終わった。存在しないモジュール名では例外を出したので、指定したモジュールを読み込んで検査したと考えている。依存先まで検査し直すかどうかは確かめていない。この章に定理（証明の無関係性と `decide` の 3 つ）を足した後にも、第4章のモジュールを同じ方法で検査し直した。何も報告せず、終了コード 0 で終わった（存在しないモジュール名では、例外を出して終了コード 1 になった）。
+
+## 金融数学への接続
+
+「Lean が証明した」ことの中身を、2 つに分ける。**Lean の論理的な信頼の基盤**と、**金融モデルの経済的な前提**である。
+
+| 種類 | 何を信頼するか | Lean の中での置き場所 | どう確かめるか |
+|---|---|---|---|
+| 論理の信頼の基盤 | カーネルの実装と 3 つの公理 | `#print axioms` に現れる | `lake build`、`#print axioms`、別の検査器 |
+| 計算の信頼 | 計算の手続きが、定義どおりの値を出すこと | `decide` ならカーネルが計算する。`native_decide` や外部の計算は、公理として外に置く | 定理として証明するか、置いた公理を明示する |
+| 命題の一致 | 定義と命題が意図を表していること | 置き場所はない | 人が読んで確かめる |
+| 金融モデルの前提 | 取引可能性、確率測度、ニューメレール、摩擦がないこと | 定理の**仮定**（引数） | 経済的に妥当かは人が判断する |
+
+計算を信頼することと、モデルの仮定を信頼することは、別のことである。
+
+- Lean は、オプション価格の**計算の手続き**が、ある定義（たとえば二項モデルの価格の式）どおりの値を出すことを証明できる。これは「計算の信頼」の層で、論理の信頼の基盤の上で確かめられる。
+- しかし、その価格が市場で**無裁定価格**になることは、計算の手続きをいくら確かめても出てこない。そのためには、何を取引でき、どの確率測度で測り、何をニューメレールにするかという、金融モデルの前提が要る。この前提が経済的に妥当かは、Lean の外の問題である。
+
+この前提には、Lean の中に正しい置き場所がある。定理の仮定である。
+
+```{r}
+#| label: lean-no-free-lunch
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch04KernelAxioms", "no_free_lunch")
+```
+
+この定理は、第2章の `NoArbitrage` を仮定 `hna` として受け取る。定理は「無裁定ならば」と述べているだけで、市場が無裁定であるとは主張していない。前の節の `axiom` と比べると、仮定を引数に置く利点がはっきりする。
+
+- 仮定が定理の文面に現れ、読む人に見える。
+- 仮定が偽の市場には、仮定の証明が作れないので当てはめられない。
+- 公理は増えない。論理の信頼の基盤は、標準の 3 つのまま変わらない。
+
+第1章で紹介した formal-mathfin の CRR から Black–Scholes への収束定理も、無裁定を `axiom` ではなく仮定 `hna` として置いていた。
+
+本書の問い「この価格は、どの市場の仮定のもとで、無裁定条件を満たすのか」は、Lean の言葉では「この価格についての定理は、どの仮定を引数に持つのか」と言い換えられる。論理の信頼の基盤（公理）と、金融モデルの前提（仮定）を混ぜずに置くこと。それが、第II部で無裁定価格理論を扱うときの出発点になる。
+
+## 演習
+
+1. 自然数の足し算を 1 つ目の引数についての再帰で定義し直し、`rfl` で閉じる等式が `0 + n = n` と `n + 0 = n` のどちらになるかを確かめよ。
+2. `Quot.lift` を使って、`Parity` の上の足し算を定義せよ。示す必要がある性質は何か。
+3. 第1章の `two_mul_sumTo_of_lt_100` を `native_decide` で証明し直し、`#print axioms` を比べよ。この本の合格条件ではどうなるか。
+4. 部分型 `{n : Nat // n % 2 = 0}` の要素 `⟨4, h₁⟩` と `⟨4, h₂⟩` が等しいことを `rfl` で示せ。この等しさを支えているのは、カーネルのどの規則か。
+5. 「費用が 0 以下で、どの状態でも支払いが非負、ある状態で正の戦略はない」を、(a) 無裁定を定理の仮定に置く形と、(b) 確認用のファイルで `axiom` として置く形の 2 通りで書け。定理の文面と `#print axioms` の結果を比べよ。

@@ -10,6 +10,9 @@ Lean 本体だけを使う（Mathlib は使わない）。「Lean が証明し�
 
 - 定義上の等式：`rfl` で閉じるのは、両辺が計算（β・δ・ι 簡約など）や η で一致する場合である。
   `n + 0 = n` は定義上の等式で、`0 + n = n` は命題としての等式（帰納法が要る）である。
+- 証明の無関係性：同じ命題の 2 つの証明は定義上等しい（`proof_irrel_rfl`、`subtype_eq_rfl`）。
+- `decide`：カーネルが計算する決定手続き（`sum_range_ten_decide`）。`native_decide` は、
+  確認用のスクリプトで比べる（新しい公理を作るので、ライブラリには置かない）。
 - 3 つの公理：
   - `propext`：同値な命題は等しい（`and_true_eq`）。
   - `Quot.sound`：商型で、関係する要素は等しい（`Parity`）。関数の外延性 `funext` はこれから導かれる。
@@ -41,6 +44,21 @@ theorem nat_add_zero (n : Nat) : n + 0 = n := rfl
 /-- `0 + n = n` は、`n` が変数のままでは計算が進まない。Lean 本体の定理 `Nat.zero_add`
 （帰納法による証明）を使う。 -/
 theorem nat_zero_add (n : Nat) : 0 + n = n := Nat.zero_add n
+
+/-! ## 証明の無関係性と `Prop` -/
+
+/-- 証明の無関係性：同じ命題の 2 つの証明は、定義上等しい。カーネルが型検査の中で判定する。 -/
+theorem proof_irrel_rfl (p : Prop) (h₁ h₂ : p) : h₁ = h₂ := rfl
+
+/-- 部分型の要素は、値が同じなら、それに添えた証明が違っても等しい。「`0 < n` を満たす `n`」を
+扱うとき、証明の違いを気にしなくてよい。 -/
+theorem subtype_eq_rfl (h₁ h₂ : 0 < 1) : (⟨1, h₁⟩ : {n : Nat // 0 < n}) = ⟨1, h₂⟩ := rfl
+
+/-! ## `decide`：カーネルが計算する -/
+
+/-- `decide` は、決定手続きをカーネルに計算させて証明を作る。公理には依存しない。
+同じ命題を `native_decide` で証明した場合は、`scripts/ch04_checks.lean` で比べる。 -/
+theorem sum_range_ten_decide : (List.range 10).foldl (· + ·) 0 = 45 := by decide
 
 /-! ## 3 つの公理 -/
 

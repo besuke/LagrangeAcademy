@@ -60,6 +60,9 @@ import LagrangeAcademy
 -- PartI/Ch04KernelAxioms.lean (Part I, chapter 4)
 #print axioms LagrangeAcademy.Ch04.beta_delta_iota
 #print axioms LagrangeAcademy.Ch04.fun_eta
+#print axioms LagrangeAcademy.Ch04.proof_irrel_rfl
+#print axioms LagrangeAcademy.Ch04.subtype_eq_rfl
+#print axioms LagrangeAcademy.Ch04.sum_range_ten_decide
 #print axioms LagrangeAcademy.Ch04.nat_add_zero
 #print axioms LagrangeAcademy.Ch04.nat_zero_add
 #print axioms LagrangeAcademy.Ch04.and_true_eq
