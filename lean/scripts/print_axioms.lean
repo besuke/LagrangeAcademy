@@ -84,3 +84,18 @@ import LagrangeAcademy
 #print axioms LagrangeAcademy.Ch05.sumOdd_eq
 #print axioms LagrangeAcademy.Ch05.call_spread_bounds
 #print axioms LagrangeAcademy.Ch05.call_spread_bounds'
+
+-- PartI/Ch06StructuresClasses.lean (Part I, chapter 6)
+#print axioms LagrangeAcademy.Ch06.PosNat.add_val
+#print axioms LagrangeAcademy.Ch06.isEven_iff_mod
+#print axioms LagrangeAcademy.Ch06.isEven_ten
+#print axioms LagrangeAcademy.Ch06.not_isEven_seven
+#print axioms LagrangeAcademy.Ch06.zero_add_add_zero
+#print axioms LagrangeAcademy.Ch06.zero_add_add_zero_nat
+#print axioms LagrangeAcademy.Ch06.add_sq_ring
+#print axioms LagrangeAcademy.Ch06.add_sq_ring_int
+#print axioms LagrangeAcademy.Ch06.add_sq_ring_rat
+#print axioms LagrangeAcademy.Ch06.OnePeriodBinomial.d_lt_u
+#print axioms LagrangeAcademy.Ch06.OnePeriodBinomial.q_pos
+#print axioms LagrangeAcademy.Ch06.OnePeriodBinomial.q_lt_one
+#print axioms LagrangeAcademy.Ch06.exampleModel_q

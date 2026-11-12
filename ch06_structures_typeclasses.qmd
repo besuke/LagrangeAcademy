@@ -1,3 +1,287 @@
 # 構造体・型クラス・数学的仮定
 
-【執筆予定】この章の中心の問い：数学的な対象と仮定を、Leanの型でどう表すのか。
+```{r}
+#| label: setup-ch06
+#| include: false
+source("R/utility_LAD.R", encoding = "UTF-8")
+```
+
+この章の問いは、**数学的な対象と仮定を、Lean の型でどう表すのか**である。第5章では、`decide` が `Decidable` のインスタンスを見つけられずに失敗した。この章は、そのインスタンスとは何か、誰がどう用意するのかから始める。次の順に進む。
+
+1. 構造体：値と、その値が満たす性質をまとめる。
+2. 型クラスとインスタンス：`Decidable` を自分で用意する。
+3. 型クラスを定義し、公理を満たす型すべてについて 1 度だけ定理を証明する。
+4. Mathlib の代数の階層。
+5. 金融数学への接続：1 期間の二項モデルの仮定を構造体に置く。
+
+この章から Mathlib を使う。
+
+## 問題提起：仮定をどこに置くか
+
+数学では、「$G$ を群とする」と書いて議論を始める。これは、集合 $G$ と演算と単位元があり、それらが結合法則などの公理を満たす、という仮定である。金融のモデルも同じ形をしている。「1 期間の二項モデルで、$0 < d < 1 + r < u$ とする」は、数の組 $(r, u, d)$ と、それが満たす不等式の仮定である。
+
+第4章では、市場の仮定を定理の引数（`hna`）に置いた。仮定が 1 つなら、これで足りる。しかし、仮定が増えるたびに、すべての定理の引数を書き並べるのは不便で、誤りのもとになる。この章では、仮定を**型**にまとめる 2 つの方法、構造体と型クラスを扱う。
+
+## 数学的背景
+
+### 構造としての数学
+
+現代の数学の多くは、**台集合・演算・公理の組**として対象を定める。群は $(G, \cdot, e)$ と、結合法則・単位元・逆元の公理の組である。型理論では、この組を**依存型の組**（$\Sigma$ 型）で表せる。後の項の型が前の項に依存するので、「$e$ は $G$ の要素である」「$\cdot$ は $G$ の上の演算である」「公理は $\cdot$ と $e$ についての命題である」が、そのまま型として書ける。Lean の**構造体**は、この組を、名前つきの項を持つ、構成子が 1 つの帰納型として定義する（第3章の帰納型の特別な場合）。
+
+公理を項に入れることには意味がある。公理の項は `Prop` の要素、つまり証明なので、**公理を満たさない値では、構造体の要素を作れない**。
+
+### 型クラス：仮定を推論させる
+
+構造体を明示的な引数として渡すと、「$\mathbb{Z}$ を群とみなすときの演算は足し算」のような、文脈から明らかな情報も毎回書くことになる。**型クラス**は、これを推論に任せる仕組みである。
+
+- **型クラス**は、型を引数に持つ構造体である（`Decidable p`、`CommRing R` など）。
+- **インスタンス**は、ある型について、その構造体の要素を 1 つ登録したものである。
+- 定理の引数に `[CommRing R]` と書くと、定理を使う側で、Lean がインスタンスを**探索**して埋める。
+
+この考え方は、Haskell の型クラス（Wadler と Blott、1989）に始まる。Lean 4 のインスタンスの探索は、論理プログラミングの探索として実装されている（Selsam、Ullrich、de Moura「Tabled Typeclass Resolution」、2020）。第5章の `failed to synthesize` は、この探索が失敗したという報告である。
+
+### 代数の階層
+
+Mathlib は、型クラスを積み重ねて代数の階層を作っている。たとえば、可換環 `CommRing` は環 `Ring` に乗法の可換性を加えたもので、環は、足し算について可換群、掛け算について単位元つきの半群（モノイド）で、分配法則を満たすものである。ある型が可換環のインスタンスを持てば、環・加法群などのインスタンスも自動で得られる。そのため、**可換環について 1 度証明した定理は、整数にも有理数にも実数にも使える**。
+
+順序体（全順序と両立する体）は、Lean 4.35.0 の Mathlib では、`[Field K] [LinearOrder K] [IsStrictOrderedRing K]` の 3 つの型クラスを並べて表す。体の構造、順序、それらの両立の条件を、別々の型クラスとして持つ書き方である。
+
+### 仮定の 3 つの置き方
+
+| 置き方 | 例 | 向いている場合 |
+|---|---|---|
+| 定理の引数 | 第4章の `hna : NoArbitrage …` | その定理だけで使う仮定 |
+| 構造体の項 | この章の `OnePeriodBinomial` | 値と仮定が組になって、いくつもの定理で使われる |
+| 型クラス | `[CommRing R]`、`Decidable p` | 型から一意に決まり、推論させたい構造 |
+
+どの置き方でも、仮定は**仮定**であって、Lean が証明した事実ではない。違うのは、仮定をどこに書き、誰が埋めるかだけである。
+
+## Lean による説明
+
+コードは、Lean が検査したファイル `lean/LagrangeAcademy/PartI/Ch06StructuresClasses.lean` から読み込んで示す。エラーや `#print` の結果は、確認用のスクリプト `lean/scripts/ch06_checks.lean`（この節の最後に示す）を 2026-11-13 に `lean/` で実行したものである。
+
+### 構造体：値と性質をまとめる
+
+```{r}
+#| label: lean-pos-nat
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "PosNat")
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "PosNat.add")
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "PosNat.add_val")
+```
+
+`PosNat` は、自然数 `val` と、それが正であることの証明 `pos` を項に持つ。第3章の部分型 `{n : Nat // 0 < n}` と同じ内容を、項に名前をつけて書いたものである。`#print` で見ると、構成子 `PosNat.mk` が 1 つの帰納型になっている。
+
+```text
+structure LagrangeAcademy.Ch06.PosNat : Type
+number of parameters: 0
+fields:
+  LagrangeAcademy.Ch06.PosNat.val : ℕ
+  LagrangeAcademy.Ch06.PosNat.pos : 0 < self.val
+constructor:
+  LagrangeAcademy.Ch06.PosNat.mk (val : ℕ) (pos : 0 < val) : PosNat
+```
+
+`PosNat.add` は、和の値だけでなく、和が正であることの証明も作らなければならない。定義を書く側が、性質を保つ責任を負う。そのかわり、`PosNat` を受け取る側は、正であることを改めて確かめなくてよい。値 `0` で `PosNat` の要素を作ろうとすると、証明の項が作れずに拒否される。
+
+```text
+ch06_checks.lean:21:37: error: Tactic `decide` proved that the proposition
+  0 < 0
+is false
+```
+
+### `Decidable` のインスタンスを用意する
+
+第5章の `IsEven n`（`∃ k, n = 2 * k`）には、`Decidable` のインスタンスがない。存在の命題の形のままでは、Lean は判定の手続きを見つけられない。そこで、判定できる同値な命題 `n % 2 = 0` を経由して、インスタンスを作る。
+
+```{r}
+#| label: lean-is-even-decidable
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "isEven_iff_mod")
+```
+
+```{r}
+#| label: lean-is-even-instance
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "isEven_decidable")
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "isEven_ten")
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "not_isEven_seven")
+```
+
+`decidable_of_iff` は、同値な命題の判定の手続きを移す Lean 本体の関数である。インスタンスを登録すると、`decide` がそれを見つけて使う。`#synth` で確かめると、`IsEven 10` について見つかるのは、いま登録したインスタンス `isEven_decidable` である。
+
+```text
+isEven_decidable 10
+```
+
+`Decidable` そのものも、型クラス、つまり型を引数に持つ構造体である。Lean 4.35.0 では、真理値 `decide` と、その真理値が命題を正しく反映することの証明 `reflects_decide` を項に持つ。
+
+```text
+class Decidable (p : Prop) : Type
+number of parameters: 1
+fields:
+  Decidable.decide : Bool
+  Decidable.reflects_decide : (decide p).Reflects p
+constructor:
+  Decidable.intro {p : Prop} (decide : Bool) (reflects_decide : decide.Reflects p) : Decidable p
+```
+
+`decide` が命題を証明できるのは、計算した真理値だけでなく、それが命題を反映するという**証明**をインスタンスが持っているからである。誤った判定の手続きをインスタンスにすることはできない。`reflects_decide` の証明が作れないからである。
+
+### 型クラスを定義する
+
+足し算と零を持ち、零が左右の単位元になる型を、型クラスとして定義する。Mathlib の `AddZeroClass` を簡単にしたものである。
+
+```{r}
+#| label: lean-add-zero-class
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "AddZeroClass'")
+```
+
+自然数と真理値（「または」を足し算、`false` を零とみなす）のインスタンスを作る。公理の項には、Lean 本体の定理を渡す。
+
+```{r}
+#| label: lean-add-zero-instances
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "addZeroClassNat")
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "addZeroClassBool")
+```
+
+定理は、インスタンスを持つ型すべてについて 1 度だけ証明する。
+
+```{r}
+#| label: lean-zero-add-add-zero
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "zero_add_add_zero")
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "zero_add_add_zero_nat")
+```
+
+`zero_add_add_zero` の証明は、`AddZeroClass'` の公理だけを使い、型 `α` の中身を知らない。自然数に使う側では、Lean がインスタンスを探して `α := Nat` の場合を埋める。
+
+### Mathlib の代数の階層
+
+Mathlib の可換環 `CommRing` についての定理を 1 度証明し、整数と有理数に使う。証明は、可換環の等式を正規化して比べる `ring` に任せている。
+
+```{r}
+#| label: lean-add-sq
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "add_sq_ring")
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "add_sq_ring_int")
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "add_sq_ring_rat")
+```
+
+自然数 `ℕ` は可換環ではない（引き算が足し算の逆演算にならない）ので、この定理を自然数には使えない。
+
+```text
+ch06_checks.lean:34:63: error(lean.synthInstanceFailed): failed to synthesize instance of type class
+  CommRing ℕ
+```
+
+同じ展開の公式は自然数でも成り立つ。成り立たないのではなく、**この定理が置いた仮定 `[CommRing R]` を、自然数が満たさない**のである。Mathlib には、可換半環についての同じ形の定理もある。仮定を弱くするほど、定理を使える範囲は広がる。
+
+この章を書いている途中では、この定理を `add_sq'` と名づけていた。しかし Mathlib に同じ名前の別の定理（`_root_.add_sq'`、右辺の項の順序が違う）があり、確認用のスクリプトで名前を開いて使うと、Lean は両方の候補を試して、それぞれの失敗を報告した（`overloaded, errors`、2026-11-13 の作業記録）。名前を `add_sq_ring` に変えた。Mathlib の上で書くときは、名前の衝突にも気をつける必要がある。
+
+### Lean が受け付けない例
+
+確認用のスクリプトの全体を示す。
+
+```{r}
+#| label: lean-ch06-checks
+#| echo: false
+#| output: asis
+show_lean_script_LAD("ch06_checks")
+```
+
+5 番目は、次の節で扱う。
+
+## 検証
+
+2026-11-13 に `lean/` で `lake build`（警告なし）と `lake env lean scripts/print_axioms.lean` を実行した結果は、次のとおりである。
+
+| 定理 | 内容 | 依存する公理 |
+|---|---|---|
+| `PosNat.add_val` | 構造体の値の計算 | なし |
+| `zero_add_add_zero`、`zero_add_add_zero_nat` | 自分で定義した型クラスの定理 | なし |
+| `isEven_iff_mod`、`isEven_ten`、`not_isEven_seven` | `Decidable` のインスタンスと `decide` | `propext`、`Quot.sound` |
+| `add_sq_ring`、`add_sq_ring_int` | 可換環の定理と、整数への適用 | `propext` |
+| `add_sq_ring_rat` | 有理数への適用 | `propext`、`Classical.choice`、`Quot.sound` |
+| `OnePeriodBinomial.d_lt_u` | 構造体の仮定からの帰結（次の節） | `propext`、`Quot.sound` |
+| `OnePeriodBinomial.q_pos`、`OnePeriodBinomial.q_lt_one` | リスク中立確率の範囲（次の節） | `propext`、`Classical.choice`、`Quot.sound` |
+| `exampleModel_q` | 合成の値の例での計算（次の節） | `propext`、`Classical.choice`、`Quot.sound` |
+
+自分で定義した型クラスの定理は、どの公理にも依存しない。同じ定理 `add_sq_ring` を使っても、整数に使うと `propext` だけで、有理数に使うと 3 つの公理すべてに依存する。違いは、整数と有理数のインスタンスが使う定義や補題から来ていると考えられるが、どの補題かは確かめていない（未確認の推定）。どれも標準の 3 つの公理の範囲にある。
+
+## 金融数学への接続
+
+1 期間の二項モデルを考える。今日 1 の安全資産は、1 期後に $1 + r$ になる。今日 1 の危険資産は、1 期後に $u$ 倍か $d$ 倍になる。このモデルの基本の仮定は
+
+$$
+0 < d < 1 + r < u
+$$
+
+である。この仮定を、構造体の項に置く。
+
+```{r}
+#| label: lean-one-period-binomial
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "OnePeriodBinomial")
+```
+
+係数の型 `K` は、任意の順序体である。有理数 `ℚ` なら正確な計算ができ、実数 `ℝ`（第7章）なら解析が使える。どちらについても、以下の定理は 1 度の証明で成り立つ。
+
+リスク中立確率 $q = (1 + r - d)/(u - d)$ は、仮定のもとで $0$ と $1$ の間にある。
+
+```{r}
+#| label: lean-risk-neutral-q
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "q")
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "d_lt_u")
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "q_pos")
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "q_lt_one")
+```
+
+定理の引数は `m : OnePeriodBinomial K` の 1 つだけで、仮定はその項として `m.d_lt`、`m.lt_u` のように取り出す。第4章のように仮定を 1 つずつ引数に並べる必要はない。
+
+具体的なモデルを作るには、値と、仮定の証明を与える。値は合成の値である。
+
+```{r}
+#| label: lean-example-model
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "exampleModel")
+show_lean_declaration_LAD("PartI/Ch06StructuresClasses", "exampleModel_q")
+```
+
+確認用のスクリプトの 5 番目では、$d = 11/10$、$r = 1/100$ として $d < 1 + r$ を破る値を与えた。`norm_num` は不等式を `False` に簡約し、証明を作れない。
+
+```text
+ch06_checks.lean:29:10: error: unsolved goals
+⊢ False
+```
+
+ここで示したことと、示していないことを分けておく。
+
+- **示したこと**：仮定 $0 < d < 1 + r < u$ のもとで、$q$ が $0$ と $1$ の間にあること。任意の順序体について、Lean が証明した。
+- **示していないこと**：
+  - この仮定が、1 期間の二項モデルで**裁定がないこと**と同値であること。金融数学ではよく知られた事実だが、この章では証明していない。第2章の `NoArbitrage` の言葉で述べ直して証明するのは、第II部の課題である。
+  - $q$ で期待値をとって割り引いた値が、派生証券の**無裁定価格**になること。これも第II部で扱う。
+  - この仮定とモデルが、現実の市場にどれだけ適合しているか。これは Lean の証明の外の問題である（第4章）。
+
+構造体の名前 `OnePeriodBinomial` や、定義の名前 `q` は、それが「リスク中立確率」であることを証明しない。名前は読む人のためのもので、カーネルが確かめるのは、型と証明だけである。本書の問い「この価格は、どの市場の仮定のもとで、無裁定条件を満たすのか」に答えるには、仮定（構造体の項）と、そこから証明した定理を、この形で 1 つずつ積み上げていく。
+
+## 演習
+
+1. `PosNat` の掛け算 `PosNat.mul` を定義し、`(a.mul b).val = a.val * b.val` を示せ。
+2. 第5章の演習の `IsOdd n` について、`Decidable` のインスタンスを作り、`decide` で `IsOdd 7` と `¬ IsOdd 10` を示せ。
+3. `AddZeroClass'` の整数のインスタンスを作り、`zero_add_add_zero` を整数に使え。足し算を掛け算に、零を `1` に替えたインスタンスも作れるか。
+4. `add_sq_ring` の仮定を `[CommSemiring R]` に弱めて証明し直し、自然数に使えることを確かめよ。
+5. `OnePeriodBinomial` で、1 期後に上がる場合の支払いが $V_u$、下がる場合が $V_d$ の派生証券について、$\frac{q V_u + (1 - q) V_d}{1 + r}$ を定義せよ。$V_u$ と $V_d$ がともに非負なら、この値も非負であることを示せ。この値が無裁定価格であることは、まだ示していないことに注意せよ。
