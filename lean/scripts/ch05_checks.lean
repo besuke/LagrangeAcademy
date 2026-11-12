@@ -36,7 +36,7 @@ theorem rejected_sumOdd_omega (n : Nat) : sumOdd n = n * n := by
     rw [sumOdd, ih]
     omega
 
--- 6. decide は、すべての自然数についての命題を計算できない
+-- 6. この命題の Decidable のインスタンスが構成できないので、decide は使えない
 theorem rejected_decide : ∀ n : Nat, n + 0 = n := by decide
 
 -- 7. exact? は、使える定理を探して提案する（発見）。提案を使った証明は、カーネルが検査する（検証）
