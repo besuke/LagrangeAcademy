@@ -73,3 +73,14 @@ import LagrangeAcademy
 #print axioms LagrangeAcademy.Ch04.numDigits_12345_rfl
 #print axioms LagrangeAcademy.Ch04.vec_get_cons_zero
 #print axioms LagrangeAcademy.Ch04.no_free_lunch
+
+-- PartI/Ch05TheoremProving.lean (Part I, chapter 5)
+#print axioms LagrangeAcademy.Ch05.and_swap_tac
+#print axioms LagrangeAcademy.Ch05.and_swap_split
+#print axioms LagrangeAcademy.Ch05.or_swap_tac
+#print axioms LagrangeAcademy.Ch05.exists_even_gt_ten
+#print axioms LagrangeAcademy.Ch05.IsEven.add
+#print axioms LagrangeAcademy.Ch05.two_mul_le_add
+#print axioms LagrangeAcademy.Ch05.sumOdd_eq
+#print axioms LagrangeAcademy.Ch05.call_spread_bounds
+#print axioms LagrangeAcademy.Ch05.call_spread_bounds'

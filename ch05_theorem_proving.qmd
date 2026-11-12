@@ -1,3 +1,319 @@
 # Lean 4による定理証明
 
-【執筆予定】この章の中心の問い：数学者の証明を、Leanではどのように構成するのか。
+```{r}
+#| label: setup-ch05
+#| include: false
+source("R/utility_LAD.R", encoding = "UTF-8")
+```
+
+この章の問いは、**数学者の証明を、Lean ではどのように組み立てるのか**である。第2章では、証明を項として直接書いた。この章では、Lean の証明の多くが実際に書かれている形、つまり**タクティク**による証明を扱う。次の順に進む。
+
+1. ゴールと仮定：タクティクの証明は、何を書き換えていくのか。
+2. 論理の結合子ごとのタクティク：導入と除去。
+3. 存在の証明、`calc` による式の連鎖、帰納法。
+4. 自動化（`omega`、`simp`、`decide`、`exact?`）の使いどころ。
+5. 金融数学への接続：コール・スプレッドのペイオフの上下限を、場合分けで証明する。
+
+この章も Lean 本体だけを使い、Mathlib は使わない。
+
+## 問題提起：紙の上の証明と、項の間
+
+紙の上の証明は、たとえば次のように書かれる。
+
+> $m$ と $n$ が偶数なら、$m = 2a$、$n = 2b$ と書ける。すると $m + n = 2a + 2b = 2(a + b)$ なので、$m + n$ も偶数である。
+
+第2章の方法では、この証明を 1 つの項として書く必要がある。項は、出来上がった証明の**完成品**であり、組み立ての途中を表さない。一方、数学者の証明は、「$m = 2a$ と書ける」「すると」「なので」のように、**いま何がわかっていて、何を示せばよいか**を確かめながら進む。
+
+タクティクは、この「途中の状態」を Lean の中に持ち込む仕組みである。ただし、第4章で見たとおり、カーネルが受け取るのはタクティクではなく、タクティクが組み立てた項である。この章では、タクティクを使うことで何が楽になり、何が変わらないのかを区別する。
+
+## 数学的背景
+
+### ゴールと仮定
+
+証明の途中の状態は、**仮定の一覧**と**示す命題**の組で表せる。論理学では、これを**シーケント** $\Gamma \vdash \varphi$ と書く。$\Gamma$ が仮定の一覧、$\varphi$ が示す命題である。Lean はこれを**ゴール**と呼び、次の形で表示する。
+
+```text
+p q : Prop
+hp : p
+hq : q
+⊢ q ∧ p
+```
+
+`⊢` より上が仮定（とその名前）、下が示す命題である。証明は、ゴールが 1 つもなくなったときに終わる。
+
+### 後ろ向きの推論と前向きの推論
+
+第2章の自然演繹の規則は、2 つの向きに読める。
+
+- **後ろ向き**（ゴールから仮定へ）：「$p \wedge q$ を示すには、$p$ と $q$ を示せばよい」。連言の導入の規則を、結論の側から読んでいる。ゴールが分かれていく。
+- **前向き**（仮定から結論へ）：「$p \wedge q$ がわかっているなら、$p$ もわかる」。連言の除去の規則を、仮定の側から読んでいる。仮定が増えていく。
+
+数学者の証明は、この 2 つを混ぜて進む。タクティクも、この 2 つの向きに分かれる。
+
+| 結合子 | ゴールにあるとき（導入） | 仮定にあるとき（除去） |
+|---|---|---|
+| $p \to q$、$\forall x,\ P\,x$ | `intro`：仮定に移す | `apply`、`exact h x` |
+| $p \wedge q$ | `constructor`：2 つのゴールに分ける | `obtain ⟨hp, hq⟩ := h` |
+| $p \vee q$ | `left`、`right`（`exact Or.inl hp` など） | `cases h`：場合ごとに分ける |
+| $\exists x,\ P\,x$ | `refine ⟨a, ?_⟩`：証人を示す | `obtain ⟨a, ha⟩ := h`：証人を取り出す |
+| $a = b$ | `rfl`、`calc` | `rw [h]`：書き換える |
+
+`obtain ⟨a, ha⟩ := h` で存在の証明から証人を取り出せるのは、示す命題が `Prop` のときだけである。第3章と第4章で見た「`Prop` からデータは取り出せない」という制約は、タクティクを使っても変わらない。
+
+### 帰納法
+
+自然数についての命題 $P(n)$ をすべての $n$ で示すには、$P(0)$ と、「$P(n)$ ならば $P(n+1)$」を示せばよい。第3章で見たとおり、これは帰納型 `Nat` の再帰子にあたる。タクティク `induction` は、再帰子を使う項を組み立て、2 つの場合を 2 つのゴールとして示す。
+
+### 決定手続き
+
+整数の線形の不等式（足し算と、定数による掛け算だけの式）は、**Presburger 算術**の範囲にあり、真偽を機械的に判定できることが知られている。Lean 本体の `omega` は、この範囲の命題を扱う自動証明の手続きである。一方、変数どうしの掛け算を含む命題は、一般には判定できない。$n \cdot n$ のような項は、`omega` には 1 つの未知数にしか見えない（この章の「Lean が受け付けない例」で確かめる）。
+
+## Lean による説明
+
+コードは、Lean が検査したファイル `lean/LagrangeAcademy/PartI/Ch05TheoremProving.lean` から読み込んで示す。エラーやゴールの表示は、確認用のスクリプト `lean/scripts/ch05_checks.lean`（この節の最後に示す）を 2026-11-13 に `lean/` で実行したものである。
+
+### タクティクで組み立てる証明項
+
+第2章の `and_swap` は、項 `fun ⟨hp, hq⟩ => ⟨hq, hp⟩` だった。同じ命題をタクティクで書く。
+
+```{r}
+#| label: lean-and-swap-tac
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch05TheoremProving", "and_swap_tac")
+```
+
+`by` の後の各行が、ゴールを 1 つずつ変えていく。2 行目までで止めると、Lean は残ったゴールを表示する。
+
+```text
+ch05_checks.lean:15:57: error: unsolved goals
+p q : Prop
+hp : p
+hq : q
+⊢ q ∧ p
+```
+
+`intro h` で仮定 `p ∧ q` に名前 `h` がつき、`obtain` で `h` が `hp` と `hq` に分かれた。残るのは `q ∧ p` を示すことで、最後の `exact ⟨hq, hp⟩` がそれを閉じる。
+
+出来上がった項を `#print` で見ると、タクティクは消えている。
+
+```text
+theorem LagrangeAcademy.Ch05.and_swap_tac : ∀ (p q : Prop), p ∧ q → q ∧ p :=
+fun p q h => And.casesOn h fun hp hq => ⟨hq, hp⟩
+```
+
+第2章の項と同じく、連言の場合分け（`And.casesOn`）と組の構成である。**タクティクは項を組み立てる言語であり、カーネルが検査するのは、どちらの書き方でも項である。**
+
+### ゴールを分ける
+
+連言のゴールは `constructor` で 2 つに分けられる。`·` は、分かれたゴールの 1 つずつに取り組む印である。選言の仮定は `cases` で場合ごとに分ける。
+
+```{r}
+#| label: lean-split
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch05TheoremProving", "and_swap_split")
+show_lean_declaration_LAD("PartI/Ch05TheoremProving", "or_swap_tac")
+```
+
+### 存在の証明
+
+存在の証明は、証人を示して残りを示す。`refine ⟨12, ?_, ?_⟩` は、証人を `12` に決め、`?_` の 2 か所を新しいゴールとして残す。残った 2 つは、具体的な数の計算なので `decide` で閉じる。
+
+```{r}
+#| label: lean-exists
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch05TheoremProving", "exists_even_gt_ten")
+```
+
+「問題提起」の、偶数と偶数の和が偶数であるという証明は、次のようになる。
+
+```{r}
+#| label: lean-is-even-add
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch05TheoremProving", "IsEven")
+show_lean_declaration_LAD("PartI/Ch05TheoremProving", "IsEven.add")
+```
+
+紙の上の証明と、行ごとに対応している。
+
+| 紙の上の証明 | Lean |
+|---|---|
+| $m = 2a$ と書ける | `obtain ⟨a, ha⟩ := hm` |
+| $n = 2b$ と書ける | `obtain ⟨b, hb⟩ := hn` |
+| $a + b$ を証人にする | `refine ⟨a + b, ?_⟩` |
+| $m + n = 2a + 2b = 2(a + b)$ | `rw [ha, hb, Nat.mul_add]` |
+
+最後の行の `rw` は、ゴール `m + n = 2 * (a + b)` の `m` と `n` を `ha`、`hb` で書き換え、分配法則 `Nat.mul_add` で右辺を `2 * a + 2 * b` に直す。両辺が同じ形になると、`rw` はゴールを `rfl` で閉じる。
+
+### 式の連鎖：`calc`
+
+紙の上で $2a = a + a \le a + b$ と書く式の連鎖は、`calc` でそのまま書ける。各行の `:=` の後に、その一歩の理由を書く。
+
+```{r}
+#| label: lean-calc
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch05TheoremProving", "two_mul_le_add")
+```
+
+この証明は `by` を使わない項である。`calc` は項としてもタクティクとしても使える。
+
+1 行目の理由 `Nat.two_mul a` の名前は、`exact?` に探させることもできる。`exact?` は、ゴールを閉じる定理を探して提案する。
+
+```text
+Try this:
+  [apply] exact Nat.two_mul a
+```
+
+`exact?` は**発見**の道具で、提案された証明は、改めてカーネルの**検証**を受ける。第1章の「発見と検証の非対称」が、タクティクの中にも現れている。
+
+### 帰納法
+
+最初の $n$ 個の奇数の和 $1 + 3 + \cdots + (2n - 1)$ が $n^2$ になることを示す。
+
+```{r}
+#| label: lean-sum-odd
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch05TheoremProving", "sumOdd")
+show_lean_declaration_LAD("PartI/Ch05TheoremProving", "sumOdd_eq")
+```
+
+`induction` が作る 2 つのゴールは、何もせずに止めると次のように表示される。
+
+```text
+ch05_checks.lean:22:9: error: unsolved goals
+case zero
+⊢ sumOdd 0 = 0 * 0
+ch05_checks.lean:23:14: error: unsolved goals
+case succ
+n : ℕ
+ih : sumOdd n = n * n
+⊢ sumOdd (n + 1) = (n + 1) * (n + 1)
+```
+
+`case succ` には、帰納法の仮定 `ih` が仮定として入っている。証明では、`rw [sumOdd, ih]` でゴールの左辺を `n * n + (2 * n + 1)` に直し、`Nat.add_mul` と `Nat.mul_add` で右辺の $(n+1)(n+1)$ を展開してから、残りの線形の等式を `omega` で閉じている。
+
+### 自動化の使いどころ
+
+この章の証明は、手で書く部分と、自動化に任せる部分を分けている。
+
+| タクティク | 任せるもの | 任せられないもの |
+|---|---|---|
+| `decide` | 決定可能な命題を、カーネルの計算で判定する（第4章） | 「すべての自然数について」のように、有限の計算で判定できない命題 |
+| `omega` | 整数・自然数の線形の等式と不等式 | 変数どうしの掛け算 |
+| `simp` | 登録された等式による書き換えの繰り返し | どの等式で書き換えるかが登録にない場合 |
+| `exact?` | 使える定理の検索（発見） | 証明の構成の方針 |
+
+どれを使っても、出来上がるのは項であり、カーネルが検査する。自動化は、証明を**見つける**手間を減らすが、検査される対象は変わらない。
+
+### Lean が受け付けない例
+
+確認用のスクリプトの全体を示す。
+
+```{r}
+#| label: lean-ch05-checks
+#| echo: false
+#| output: asis
+show_lean_script_LAD("ch05_checks")
+```
+
+4 番目は、`q` を示すべきところに `p` の証明を渡した例である。
+
+```text
+ch05_checks.lean:28:4: error: Type mismatch
+  hp
+has type
+  p
+but is expected to have type
+  q
+```
+
+5 番目は、`sumOdd_eq` の帰納法の段階で、右辺を展開せずに `omega` に任せた例である。
+
+```text
+ch05_checks.lean:37:4: error: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  c ≥ 0
+  b ≥ 0
+  a ≥ 0
+  a - b + 2*c ≤ -2
+where
+ a := ↑n * ↑n
+ b := ↑(n + 1) * ↑(n + 1)
+ c := ↑n
+```
+
+`omega` は、`n * n` と `(n + 1) * (n + 1)` を、互いに無関係な未知数 `a` と `b` とみなした。そのため、等式が成り立たない「反例」がありうると報告している。この章の執筆中にも、展開の補題の選び方を誤って、同じ形のエラーを実際に受け取った（`Nat.succ_mul` と `Nat.mul_succ` で書き換えたとき）。展開の補題を `Nat.add_mul` と `Nat.mul_add` に直すと通った。
+
+6 番目は、`decide` に「すべての自然数について」の命題を渡した例である。
+
+```text
+ch05_checks.lean:40:53: error: failed to synthesize
+  Decidable (∀ (n : ℕ), n + 0 = n)
+```
+
+`decide` は、命題が決定可能であること（`Decidable` のインスタンス）を必要とする。無限に多い自然数を調べる手続きはないので、インスタンスが見つからない。型クラスとインスタンスは第6章で扱う。
+
+## 検証
+
+2026-11-13 に `lean/` で `lake build`（警告なし）と `lake env lean scripts/print_axioms.lean` を実行した結果は、次のとおりである。
+
+| 定理 | 内容 | 依存する公理 |
+|---|---|---|
+| `and_swap_tac`、`and_swap_split`、`or_swap_tac` | 論理の結合子の導入と除去 | なし |
+| `exists_even_gt_ten`、`IsEven.add` | 存在の証明 | なし |
+| `two_mul_le_add` | `calc` による不等式の連鎖 | なし |
+| `sumOdd_eq` | 帰納法 | `propext`、`Quot.sound` |
+| `call_spread_bounds` | コール・スプレッドの上下限（場合分け、次の節） | `propext`、`Classical.choice`、`Quot.sound` |
+| `call_spread_bounds'` | 同じ命題（`omega`、次の節） | `propext`、`Classical.choice`、`Quot.sound` |
+
+論理の結合子だけを使う証明は、どの公理にも依存しない。`sumOdd_eq` と 2 つの `call_spread_bounds` の公理は、`omega` などのタクティクが組み立てた項が使う補題から来ていると考えられる。どの補題から来るかは確かめていない（未確認の推定）。どれも標準の 3 つの公理の範囲にあり、この本の合格条件を満たす。
+
+## 金融数学への接続
+
+行使価格 $k_1 \le k_2$ の 2 つのコールについて、$k_1$ のコールを買い、$k_2$ のコールを売る組合せを**コール・スプレッド**という。満期の原資産価格を $s$ とすると、満期のペイオフは
+
+$$
+\max(s - k_1, 0) - \max(s - k_2, 0)
+$$
+
+で、これは $0$ 以上 $k_2 - k_1$ 以下である。紙の上では、$s$ の位置で 3 つに場合を分けて示す。
+
+- $s \le k_1$：どちらのコールも行使されず、ペイオフは $0$。
+- $k_1 < s \le k_2$：$k_1$ のコールだけが行使され、ペイオフは $s - k_1$ で、$0 < s - k_1 \le k_2 - k_1$。
+- $k_2 < s$：両方が行使され、ペイオフは $(s - k_1) - (s - k_2) = k_2 - k_1$。
+
+Lean では、この場合分けをそのまま `by_cases` で書ける。各場合で、`max` の値を `have` で確かめてから書き換え、残りの線形の不等式を `omega` で閉じる。
+
+```{r}
+#| label: lean-call-spread
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch05TheoremProving", "callPayoff")
+show_lean_declaration_LAD("PartI/Ch05TheoremProving", "call_spread_bounds")
+```
+
+同じ命題は、`omega` だけでも証明できる。`omega` は `max` を含む線形の式も扱える。
+
+```{r}
+#| label: lean-call-spread-omega
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch05TheoremProving", "call_spread_bounds'")
+```
+
+2 つの証明は、同じ命題についての、同じ種類の項である。違うのは、人が読んで理由を追えるかどうかである。場合分けの証明は、どの価格の範囲でどちらのコールが行使されるかという、金融の意味を残している。
+
+この定理が述べているのは、**満期のペイオフ**についての事実であり、今日の価格についてではない。「ペイオフが $0$ と $k_2 - k_1$ の間にあるなら、無裁定の市場では、コール・スプレッドの今日の価格も $0$ と（割り引いた）$k_2 - k_1$ の間にある」という主張には、第4章の `NoArbitrage` のような市場の仮定が要る。ペイオフの不等式から価格の不等式へ進むことは、第II部の無裁定価格理論の中心の論点である。
+
+## 演習
+
+1. `and_swap_tac` を、`intro` と `obtain` を使わずに、`fun` と `exact` だけで書き直せ。`#print` の結果を比べよ。
+2. 奇数であることを `IsOdd n := ∃ k, n = 2 * k + 1` と定義し、奇数と奇数の和が偶数であることを示せ。
+3. `sumOdd_eq` の帰納法の段階を、`calc` を使って書き直せ。各行の理由に、どの定理を使うか。
+4. $k_1 \le k_2$ のとき、プット・スプレッド（$k_2$ のプットを買い、$k_1$ のプットを売る）の満期のペイオフ $\max(k_2 - s, 0) - \max(k_1 - s, 0)$ が $0$ 以上 $k_2 - k_1$ 以下であることを、場合分けによる証明と `omega` による証明の 2 通りで示せ。
+5. `call_spread_bounds` の仮定 `hk : k₁ ≤ k₂` を外すと、命題は成り立つか。成り立たないなら、`decide` を使える具体的な数の反例を示せ。
