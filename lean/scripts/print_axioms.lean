@@ -129,3 +129,32 @@ import LagrangeAcademy
 #print axioms LagrangeAcademy.Ch09.badBinomial_isEmpty
 #print axioms LagrangeAcademy.Ch09.onePeriodBinomial_nonempty
 #print axioms LagrangeAcademy.Ch09.exists_prob_weak
+
+-- PartII/Ch10FiniteMarket.lean (Part II, chapter 10)
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.cost_combo
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.payoff_combo
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.cost_sub
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.payoff_sub
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.law_of_one_price
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.replication_price_unique
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.cost_le_of_payoff_le
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.cost_lt_of_payoff_le_of_lt
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.cost_unit
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.payoff_unit
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.price_between_of_dominated
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.put_call_parity
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.call_payoff_antitone
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.call_payoff_sub_le
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.call_price_antitone
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.call_spread_price_le
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.call_payoff_convex
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.call_price_convex
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.cost_eq_statePrice
+#print axioms LagrangeAcademy.Ch10.FiniteMarket.noArbitrage_of_statePrice
+#print axioms LagrangeAcademy.Ch10.twoState_complete
+#print axioms LagrangeAcademy.Ch10.twoState_noArbitrage
+#print axioms LagrangeAcademy.Ch10.twoState_isComplete
+#print axioms LagrangeAcademy.Ch10.threeState_noArbitrage
+#print axioms LagrangeAcademy.Ch10.threeState_not_complete
+#print axioms LagrangeAcademy.Ch10.threeStateExt_noArbitrage_quarter
+#print axioms LagrangeAcademy.Ch10.threeStateExt_noArbitrage_alt

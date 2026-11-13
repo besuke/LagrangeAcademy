@@ -1,0 +1,356 @@
+# 有限市場における無裁定と価格の一意性
+
+```{r}
+#| label: setup-ch10
+#| include: false
+source("R/utility_LAD.R", encoding = "UTF-8")
+```
+
+第II部の最初のこの章では、本書の軸「この価格は、どの市場の仮定のもとで、無裁定条件を満たすのか」に、最も簡単な市場で答える。1 期間で、満期の状態も取引できる資産も有限個の市場である。この市場で、取引できる資産・ポートフォリオ・初期費用・将来の支払いを定義し、無裁定の仮定だけから、一物一価、価格の一意性、支配関係、価格の上下限、プット・コール・パリティ、コールの価格の形を導く。
+
+この章では、ニューメレール、割引、確率測度を使わない。債券は「満期にどの状態でも 1 を払う資産」で、その今日の価格 $B$ は、市場の 1 つのデータにすぎない。ニューメレールは第11章以降で定義し、そのあとでマルチンゲール測度に進む。
+
+## 市場の仮定
+
+### 市場とポートフォリオ
+
+**仮定**（この章のすべての命題に共通）
+
+- 時点は今日と満期の 2 つだけである（1 期間）。
+- 満期の状態の集合 $\Omega$ は有限である。どの状態も経済的に起こりうる状態とみなす。確率は置かないが、裁定の定義では、すべての状態の支払いを数える。
+- 取引できる資産の集合 $I$ は有限である。資産 $i$ には、今日の価格 $p_i$ と、状態 $\omega$ での満期の支払い $X_i(\omega)$ がある。
+- 摩擦はない。手数料も売値と買値の差もなく、どの資産も任意の実数単位で、売りも買いも（空売りも）できる。
+
+**定義**
+
+- **ポートフォリオ**は関数 $\theta : I \to \mathbb{R}$ で、資産 $i$ を $\theta_i$ 単位持つことを表す。
+- **初期費用**：$\mathrm{cost}(\theta) = \sum_i \theta_i\, p_i$。
+- **満期の支払い**：$\mathrm{payoff}(\theta)(\omega) = \sum_i \theta_i\, X_i(\omega)$。
+
+費用と支払いがポートフォリオについて線形であることは、仮定ではなく、摩擦がないという仮定を定義に反映した結果である。
+
+### 裁定と無裁定
+
+ポートフォリオ $\theta$ が**裁定**であるとは、次の 3 つを満たすことである。
+
+1. 費用が 0 以下：$\mathrm{cost}(\theta) \le 0$。
+2. どの状態でも支払いが非負：すべての $\omega$ で $\mathrm{payoff}(\theta)(\omega) \ge 0$。
+3. 費用が負か、ある状態で支払いが正：$\mathrm{cost}(\theta) < 0$、または、ある $\omega$ で $\mathrm{payoff}(\theta)(\omega) > 0$。
+
+市場が**無裁定**であるとは、裁定になるポートフォリオがないことである。この章のすべての定理は、無裁定を**仮定**として引数に置く（第4章、第6章）。市場が無裁定であるとは主張しない。
+
+### 複製と完備性
+
+- ポートフォリオ $\theta$ が支払い $C : \Omega \to \mathbb{R}$ を**複製する**とは、すべての $\omega$ で $\mathrm{payoff}(\theta)(\omega) = C(\omega)$ であることをいう。
+- 市場が**完備**であるとは、どの支払い $C$ も、あるポートフォリオで複製できることをいう。
+
+### Lean による定義
+
+```{r}
+#| label: lean-ch10-defs
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "FiniteMarket")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "cost")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "payoff")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "IsArbitrage")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "NoArbitrage")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "Replicates")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "IsComplete")
+```
+
+**第2章の定義との関係**：第2章の `IsArbitrage` と `NoArbitrage` は、戦略の型 `Θ` と、費用 `cost : Θ → Int`・支払い `payoff : Θ → Ω → Int` を任意に与える一般の形で、値は整数だった。この章の定義は、次の 3 点で第2章の定義を特定の場合にしている。
+
+- 戦略の型を $\Theta = (I \to \mathbb{R})$ にする。
+- 費用と支払いを、資産の価格と支払いの線形結合で与える。
+- 値を実数にする。
+
+裁定の 3 つの条件は同じ形である。第2章の `NoArbitrage` は「裁定が存在しない」（$\neg\exists$）、この章の `NoArbitrage` は「どのポートフォリオも裁定でない」（$\forall\neg$）と書いたが、両者が同値であることは第2章の `noArbitrage_iff_forall` で示した。第2章の定義は変えず、この章で実数の線形の市場を新しく定義している。値の型が違う（`Int` と `ℝ`）ので、第2章の定理をこの章の市場にそのまま使うことはできない。
+
+## 無裁定から導く命題
+
+ここでは、命題を数学の言葉で述べる。証明は次の節で Lean で行う。
+
+1. **一物一価**：満期の支払いがすべての状態で等しい 2 つのポートフォリオは、初期費用も等しい。
+2. **価格の一意性**：同じ支払い $C$ を複製する 2 つのポートフォリオは、初期費用が等しい。つまり、**複製できる**支払いの価格は 1 つに決まる。
+3. **弱い支配**：すべての状態で $\mathrm{payoff}(\theta) \le \mathrm{payoff}(\theta')$ なら、$\mathrm{cost}(\theta) \le \mathrm{cost}(\theta')$。
+4. **強い支配**：3 の条件に加えて、ある状態で $\mathrm{payoff}(\theta) < \mathrm{payoff}(\theta')$ なら、$\mathrm{cost}(\theta) < \mathrm{cost}(\theta')$。
+5. **価格の上下限**：資産 $j$ を含む市場全体が無裁定で、資産 $j$ の支払いが、2 つのポートフォリオ $\theta_{\mathrm{lo}}$、$\theta_{\mathrm{hi}}$ の支払いに挟まれるなら、$\mathrm{cost}(\theta_{\mathrm{lo}}) \le p_j \le \mathrm{cost}(\theta_{\mathrm{hi}})$。これは無裁定な価格が満たすべき**必要条件**で、この範囲のどの価格でも無裁定になること（十分性）は述べていない。
+6. **プット・コール・パリティ**：債券（価格 $B$、どの状態でも 1 を払う）、株（価格 $S_0$）、行使価格 $K$ のコール（価格 $C$）とプット（価格 $P$）が取引されるなら、$C - P = S_0 - K B$。
+7. **コールの価格の形**：同じ株を原資産とし、行使価格 $K_1 \le K_2 \le K_3$ のコールが取引されるなら、
+   - 単調性：$C(K_2) \le C(K_1)$。
+   - 凸性：$(K_3 - K_1)\, C(K_2) \le (K_3 - K_2)\, C(K_1) + (K_2 - K_1)\, C(K_3)$。
+   - 差の上限：さらに、満期にどの状態でも 1 を払う債券（価格 $B$）が取引されるなら、$C(K_1) \le C(K_2) + (K_2 - K_1) B$。
+
+   単調性と凸性は、コールどうしの比較だけで導け、債券を必要としない。差の上限だけは、$K_2 - K_1$ を満期に確実に払うために債券を使うので、債券の存在が仮定に入る。
+8. **状態価格からの無裁定**：各状態に正の重み $\psi_\omega > 0$ があり、すべての資産について $p_i = \sum_\omega \psi_\omega X_i(\omega)$ なら、市場は無裁定である。
+
+**論理の流れ**（Lean の証明の依存関係と同じ）：
+
+- 1、3、4 は、それぞれ裁定の定義から直接示す。1 は費用の大小で 3 つに場合を分けて示し、3 を使わない（3 を両向きに使って 1 を導くこともできるが、Lean ではそうしていない）。
+- 2 は 1 から、5 は 3 を資産 $j$ を 1 単位持つポートフォリオに当てはめて導く。
+- 6 は、満期の支払いの恒等式を 1 に当てはめて導く。7 は、満期の支払いの不等式を 3 に当てはめて導く。
+- 8 は、1〜7 とは逆に、無裁定を**結論**とする命題である。
+
+**凸性の形**：7 の凸性は、行使価格が等間隔でなくてよい一般の 3 点について述べている。$K_1 < K_3$ のとき、両辺を $K_3 - K_1$ で割り、$\lambda = (K_3 - K_2)/(K_3 - K_1)$ とおくと、$K_2 = \lambda K_1 + (1 - \lambda) K_3$ で、$C(K_2) \le \lambda C(K_1) + (1 - \lambda) C(K_3)$ になる。Lean の定理は、割り算を避けた形で述べている。
+
+**一意性と完備性の区別**：2 が述べるのは、複製**できる**支払いの価格が 1 つに決まることである。どの支払いも複製できること（完備性）は述べていない。この区別は、この章の最後で、2 状態の完備な市場と、3 状態の不完備な市場の例で確かめる。
+
+## Lean による証明
+
+コードは、Lean が検査したファイル `lean/LagrangeAcademy/PartII/Ch10FiniteMarket.lean` から読み込んで示す。確認用のスクリプト `lean/scripts/ch10_checks.lean`（この節の最後に示す）は 2026-11-13 に `lean/` で実行した。
+
+### 線形性
+
+費用と支払いは、ポートフォリオの線形結合を保つ。Mathlib の有限和の定理 `Finset.mul_sum`（定数倍を和の中に入れる）と `Finset.sum_add_distrib`（和の和を分ける）を使う。
+
+```{r}
+#| label: lean-ch10-linear
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "cost_combo")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "cost_sub")
+```
+
+支払いについての `payoff_combo` と `payoff_sub` も、同じ形で証明している。
+
+### 一物一価と価格の一意性
+
+```{r}
+#| label: lean-ch10-lop
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "law_of_one_price")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "replication_price_unique")
+```
+
+証明は、弱い支配（次の小節）を使わず、費用の大小で 3 つに場合を分けて直接示す。費用が違えば、安い方を買い、高い方を売るポートフォリオ（差 $\theta - \theta'$ または $\theta' - \theta$）は、今日お金を受け取り、満期の支払いが 0 になる。これは裁定の条件 1〜3（3 は「費用が負」の側）を満たし、無裁定の仮定 `hna` に反する。
+
+### 支配関係と価格の上下限
+
+```{r}
+#| label: lean-ch10-dominance
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "cost_le_of_payoff_le")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "cost_lt_of_payoff_le_of_lt")
+```
+
+弱い支配では「費用が負」の側を、強い支配では「ある状態で支払いが正」の側を使って、差のポートフォリオが裁定になることを示す。裁定の定義の条件 3 の 2 つの側が、それぞれの命題に対応している。
+
+価格の上下限では、資産 $j$ を 1 単位だけ持つポートフォリオ `unit j` を使う。
+
+```{r}
+#| label: lean-ch10-unit
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "unit")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "cost_unit")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "price_between_of_dominated")
+```
+
+`price_between_of_dominated` の仮定 `hna` は、資産 $j$ を**含む**市場 `M` 全体の無裁定である。結論は、無裁定な価格が満たすべき必要条件で、$\mathrm{cost}(\theta_{\mathrm{lo}})$ と $\mathrm{cost}(\theta_{\mathrm{hi}})$ の間のどの価格でも無裁定になるとは述べていない（十分性は証明していない）。まだ取引されていない請求権に当てはめるには、その請求権を新しい資産として加えた**拡大市場**を考え、拡大市場の無裁定を仮定する（この章の最後の 3 状態の例）。
+
+`unit` の定義は、2 つの資産が等しいかを判定するため、型クラス `DecidableEq I` を使う（第6章）。この判定は資産の価格や支払いとは関係がないので、定理の命題には置かず、証明の中で `classical` によって用意している。最初の版では `DecidableEq I` を命題の仮定に置いていたが、Mathlib の検査（リンター）が「命題で使われていない仮定」として警告したので、この形に直した（2026-11-13 の作業記録）。
+
+### プット・コール・パリティ
+
+```{r}
+#| label: lean-ch10-parity
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "put_call_parity")
+```
+
+仮定 `hb`、`hc`、`hp` は、債券・コール・プットの**契約の条項**を、満期の支払いとして述べたものである。証明は、「コールを買い、プットを売る」ポートフォリオと、「株を買い、債券を $K$ 単位売る」ポートフォリオの支払いが等しいことを示し、一物一価を当てはめる。支払いが等しいことには、第7章の `call_sub_put_payoff_real`（$\max(s - K, 0) - \max(K - s, 0) = s - K$）を使う。
+
+### コールの価格の形
+
+```{r}
+#| label: lean-ch10-call-shape
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "call_price_antitone")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "call_spread_price_le")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "call_payoff_convex")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "call_price_convex")
+```
+
+凸性の証明は 2 段に分かれる。
+
+1. **満期の支払いの不等式**（`call_payoff_convex`）：満期の株価 $s$ が $K_1$、$K_2$、$K_3$ のどこにあるかで 4 つに場合を分け、各場合で `max` の値を決めてから、`nlinarith`（非線形の項を含む不等式の自動証明）で閉じる。これは無裁定と関係のない、実数の不等式である。
+2. **価格の不等式**（`call_price_convex`）：1 の不等式を、2 つのポートフォリオの支払いの比較として弱い支配に当てはめる。
+
+単調性と差の上限も、同じ 2 段の構成である。仮定を比べると、`call_price_antitone` と `call_price_convex` には債券が現れず、`call_spread_price_le` だけが、満期にどの状態でも 1 を払う債券 `b`（仮定 `hb`）を必要とする。
+
+### 状態価格からの無裁定
+
+```{r}
+#| label: lean-ch10-state-price
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "cost_eq_statePrice")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "noArbitrage_of_statePrice")
+```
+
+状態価格 $\psi$ は、ここでは**正の重み**として定義しただけで、和を 1 に正規化していない。定理 `noArbitrage_of_statePrice` は、債券が市場にあることを仮定していない。満期にどの状態でも 1 を払う債券が市場で取引されている場合に限り、その価格は仮定 `hp` から $B = \sum_\omega \psi_\omega \cdot 1 = \sum_\omega \psi_\omega$ になり、$\psi_\omega / B$ は和が 1 の正の重み（確率）になる。しかし、それは債券をニューメレールに選ぶことにあたるので、第11章以降に回す。
+
+証明では、まず、どのポートフォリオの費用も $\sum_\omega \psi_\omega\, \mathrm{payoff}(\theta)(\omega)$ と書けることを示す（`cost_eq_statePrice`。有限和の順序の交換 `Finset.sum_comm` を使う）。支払いが非負なら、この和は非負で、ある状態で支払いが正なら、和は正になる（`Finset.sum_pos'`）。どちらの場合も、裁定の条件 1 か 3 に反する。
+
+この定理は、**資産価格の基本定理の易しい向き**である。逆向き、つまり「無裁定なら、正の状態価格が存在する」は、この章では証明していない。その証明には、凸集合の分離定理（あるいは線形計画法の双対定理、Farkas の補題）が要る。逆向きは、Harrison と Pliska（1981）などの文献の結果として引用するにとどめる。formal-mathfin の README は、有限の確率空間の上の資産価格の基本定理 `ftap_discrete` があると述べているが、この本では読んでもビルドしてもいない（未確認）。
+
+### 2 状態の完備な市場
+
+債券と株だけの 2 状態の市場を考える。値は合成の値である。
+
+| | 今日の価格 | 上がる状態の支払い | 下がる状態の支払い |
+|---|---|---|---|
+| 債券 | $19/20$ | 1 | 1 |
+| 株 | 100 | 120 | 90 |
+
+```{r}
+#| label: lean-ch10-two-state
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "twoState_complete")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "twoState")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "twoState_noArbitrage")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "twoState_isComplete")
+```
+
+`twoState_complete` は、具体的な値によらない一般の定理である。債券がどの状態でも 1 を払い、株の 2 つの状態の支払いが違えば、どの支払い $C$ も、株を $\Delta = (C(\text{上}) - C(\text{下})) / (X_{\text{株}}(\text{上}) - X_{\text{株}}(\text{下}))$ 単位持ち、残りを債券で埋めるポートフォリオで複製できる。例の市場の無裁定は、状態価格 $\psi(\text{上}) = 29/60$、$\psi(\text{下}) = 7/15$ で価格が表せることから示した。
+
+### 3 状態の不完備な市場
+
+同じ債券と株を、3 状態の市場に置く。値は合成の値である。
+
+| | 今日の価格 | 状態 0 | 状態 1 | 状態 2 |
+|---|---|---|---|---|
+| 債券 | $19/20$ | 1 | 1 | 1 |
+| 株 | 100 | 120 | 100 | 90 |
+
+```{r}
+#| label: lean-ch10-three-state
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "threeState")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "threeState_noArbitrage")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "threeState_not_complete")
+```
+
+この市場は無裁定で（状態価格 $2/5$、$1/4$、$3/10$）、しかも完備でない。状態 1 だけで 1 を払う支払いを複製するには、債券 $a$ 単位と株 $b$ 単位で $a + 120b = 0$、$a + 100b = 1$、$a + 90b = 0$ を満たす必要がある。1 番目と 3 番目から $b = 0$、$a = 0$ となり、2 番目に反する。Lean の証明は、この 3 つの式を `linarith` に渡している。
+
+この例で、**価格の一意性と完備性の違い**がはっきりする。この市場でも、債券と株で複製できる支払いの価格は、一物一価によって 1 つに決まる。しかし、状態 1 だけで 1 を払う支払いは複製できない。その価格が無裁定の仮定だけでは 1 つに決まらないことを、状態価格で確かめる。
+
+**状態価格は 1 つではない**：$t$ を実数として
+
+$$
+\psi(t) = (0.4 + 10t,\ 0.25 - 30t,\ 0.3 + 20t)
+$$
+
+とおくと、どの $t$ でも債券と株の価格が表せる。
+
+- 債券：$\psi_0 + \psi_1 + \psi_2 = 0.95 + (10 - 30 + 20)t = 0.95$。
+- 株：$120\psi_0 + 100\psi_1 + 90\psi_2 = 100 + (1200 - 3000 + 1800)t = 100$。
+
+3 つの成分がすべて正になるのは $-0.015 < t < 1/120$ のときである。たとえば $t = 0$ では $(0.4, 0.25, 0.3)$、$t = 1/1000$ では $(0.41, 0.22, 0.32)$ で、どちらも正の状態価格である。
+
+**請求権の価格も 1 つではない**：状態 1 だけで 1 を払う請求権を、価格 $\pi$ の新しい資産として市場に加えた**拡大市場**を考える。状態価格 $\psi(t)$ がこの請求権の価格も表すのは $\pi = \psi_1(t) = 0.25 - 30t$ のときである。$t = 0$ なら $\pi = 0.25$、$t = 1/1000$ なら $\pi = 0.22$ で、どちらの拡大市場でも、3 つの資産の価格が 1 つの正の状態価格で表せる。したがって、状態価格からの無裁定の定理（`noArbitrage_of_statePrice`）により、どちらの拡大市場も無裁定である。同じ請求権に、無裁定と両立する異なる価格 0.25 と 0.22 がある。
+
+**この 2 つの拡大市場（$\pi = 0.25$ と $\pi = 0.22$）が無裁定であることは、Lean で証明済みである**（既存の定理を変えず、新しく加えた定理である）。
+
+```{r}
+#| label: lean-ch10-three-state-ext
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "threeStateExt")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "threeStateExt_noArbitrage_quarter")
+show_lean_declaration_LAD("PartII/Ch10FiniteMarket", "threeStateExt_noArbitrage_alt")
+```
+
+次の 2 つの主張は区別する。
+
+- **区間全体が無裁定価格であること**（数学的な説明のみ）：$-0.015 < t < 1/120$ の範囲で $t$ を動かすと、$\pi = 0.25 - 30t$ は $0$ から $0.7$ までの開区間を動き、その各価格で拡大市場は無裁定である。理由は上と同じで、各 $t$ で正の状態価格 $\psi(t)$ が 3 つの資産の価格を表すからである。Lean で証明したのは $t = 0$ と $t = 1/1000$ の 2 点だけで、区間全体については本文の数学的な説明にとどまる。
+- **区間の外では必ず裁定が存在すること**（この章では扱わない）：無裁定と両立する価格がちょうどこの区間であるという主張で、資産価格の基本定理の逆向きを使う。この章では証明していない。
+
+### 確認用のスクリプト
+
+```{r}
+#| label: lean-ch10-checks
+#| echo: false
+#| output: asis
+show_lean_script_LAD("ch10_checks")
+```
+
+1〜2 番目は、株が割高な市場（株の価格 130 が、満期のどの支払いよりも大きい）で、株を 1 単位売り、債券を 120 単位買うポートフォリオが裁定になることを示す。費用は $-130 + 120 \cdot 19/20 = -16$ で、満期の支払いは 30 か 0 である。無裁定は、どの市場でも成り立つわけではない。3 番目は、重みが 0 の状態があると、状態価格の定理の仮定（正の重み）を満たせないことを示す。
+
+```text
+ch10_checks.lean:30:58: error: unsolved goals
+case «1»
+⊢ False
+```
+
+## 数値の確認
+
+RiemannFinMath の Black–Scholes の価格が、この章で無裁定から導いた関係を満たすかを確かめる。入力は第7章と同じ合成の値である（スポット 100、利子率 1%、配当利回り 0、ボラティリティ 20%、満期 1 年）。
+
+**追加の仮定**：Black–Scholes の例では、この章の債券の価格 $B$ を $e^{-rT}$（平坦な連続複利の利子率 $r$ で満期 $T$ に 1 を払う債券の価格）とおく。これは**この数値例のために加えた仮定**で、この章の定理は $B$ の値について何も仮定していない。$e^{-rT}$ は R が計算する。
+
+```{r}
+#| label: r-ch10-shape
+example_ch10 <- create_vanilla_example_LAD()
+shape_ch10 <- check_call_strike_shape_LAD(example_ch10, c(80, 90, 100, 115, 130))
+show_table_LAD(shape_ch10$pairs, digits = 4)
+show_table_LAD(shape_ch10$triples, digits = 4)
+```
+
+行使価格は等間隔ではない（80、90、100、115、130）。1 つ目の表は、隣りあう 2 つの行使価格で、単調性（`decreasing`）と差の上限（`within_bound`、上限は $(K_2 - K_1) e^{-rT}$）を確かめる。2 つ目の表は、隣りあう 3 つの行使価格で、凸性を分母を払った形（`lhs` $\le$ `rhs`）で確かめる。
+
+プット・コール・パリティは、第7章の確認をそのまま使う。
+
+```{r}
+#| label: r-ch10-parity
+values_ch10 <- compute_vanilla_values_LAD(example_ch10)
+show_table_LAD(check_put_call_parity_LAD(values_ch10, example_ch10))
+```
+
+これらの確認からわかるのは、**この例で**、RiemannFinMath の数値がこれらの関係を満たす（パリティは丸めの誤差と整合的な大きさの差で）ことだけである。関係の証明ではなく、RiemannFinMath の実装が正しいことの証明でもない。Black–Scholes のモデルが無裁定であることも、ここでは示していない。
+
+## 示したことと、示していないこと
+
+**Lean で証明したこと**（すべて、上の市場の仮定と、定理ごとの仮定のもとで）
+
+- 費用と支払いの線形性。
+- 無裁定のもとでの一物一価、複製の費用の一意性、弱い支配と強い支配、価格の上下限（資産を含む市場全体の無裁定を仮定する必要条件）。
+- 契約の条項（満期の支払い）を仮定として、プット・コール・パリティと、コールの価格の単調性・一般の 3 点での凸性（債券を仮定しない）、差の上限（満期に 1 を払う債券を仮定する）。
+- 正の状態価格があれば無裁定であること。
+- 2 状態の市場の完備性（一般の定理と合成の値の例）、3 状態の合成の値の例が無裁定で不完備であること。
+- 3 状態の例に、状態 1 だけで 1 を払う請求権を価格 0.25 で加えた拡大市場と、価格 0.22 で加えた拡大市場が、どちらも無裁定であること。
+
+**Lean では証明せず、本文の数学的な議論で述べたこと**
+
+- $\psi(t)$ が $-0.015 < t < 1/120$ のどの $t$ でも正の状態価格になり、その請求権の価格 $0.25 - 30t$ のどれでも拡大市場が無裁定になること（状態価格からの無裁定の定理を、各 $t$ に当てはめる議論）。
+
+**外部の文献に依存すること**（この本では証明も検査もしていない）
+
+- 資産価格の基本定理の逆向き（無裁定なら正の状態価格が存在する）。3 状態の例で、無裁定と両立する請求権の価格がちょうど開区間 $(0, 0.7)$ であることも、これを使う主張で、証明していない。
+- 価格の上下限の十分性（上下限の間のどの価格でも無裁定になること）は、一般には示していない。
+- formal-mathfin の `ftap_discrete`（README の記述のみ。未確認）。
+
+**数値で確認したこと**
+
+- RiemannFinMath の Black–Scholes の価格が、この例で、コールの価格の形の関係とプット・コール・パリティを満たすこと。追加の仮定 $B = e^{-rT}$ のもとでの確認である。
+
+**扱っていないこと**
+
+- ニューメレール、割り引いた価格、マルチンゲール測度（第11章以降）。
+- 多期間、取引費用、空売りの制約。
+- この章の仮定（摩擦がない、任意の実数単位で売買できる）が現実の市場に合っているか（第4章）。
+
+## 演習
+
+1. 一物一価だけが成り立ち、無裁定が成り立たない市場の例を作れ（ヒント：支払いがすべて非負で、費用が負の資産を 1 つ置く）。Lean で、その市場が `NoArbitrage` を満たさないことを示せ。
+2. 3 状態の例で、状態 1 だけで 1 を払う資産を新しく市場に加えたとき、その価格が無裁定と両立する範囲を、債券と株で上下から支配するポートフォリオを使って求めよ。`price_between_of_dominated` のどの仮定を確かめる必要があるか。
+3. 3 状態の例で、本文の $\psi(t)$ がどの $t$ でも債券と株の価格を表すことを Lean で示せ。2 状態の例では、価格を表す状態価格は 1 つに決まるか。
+4. `call_price_convex` から、$K_1 < K_3$ の場合の $\lambda$ の形の凸性を導け。
+5. `put_call_parity` の仮定から `hb`（債券がどの状態でも 1 を払う）を外すと、結論はどう変わるか。債券の支払いが状態によって違う場合の関係を書け。

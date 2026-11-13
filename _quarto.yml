@@ -29,6 +29,10 @@ book:
         - ch08_mathlib_probability.qmd
         - ch09_ai_and_formal_proof.qmd
 
+    - part: "第II部　無裁定を中心とした金融数学"
+      chapters:
+        - ch10_finite_market.qmd
+
 format:
   html:
     theme: cosmo

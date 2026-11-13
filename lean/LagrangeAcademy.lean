@@ -12,3 +12,4 @@ public import LagrangeAcademy.PartI.Ch06StructuresClasses
 public import LagrangeAcademy.PartI.Ch07RealsFloats
 public import LagrangeAcademy.PartI.Ch08Probability
 public import LagrangeAcademy.PartI.Ch09AIProof
+public import LagrangeAcademy.PartII.Ch10FiniteMarket

@@ -470,6 +470,41 @@ compare_binomial_with_closed_form_LAD <- function(binomial, values) {
   tibble::tibble(steps = binomial$steps, binomial = tree, closed_form = closed, difference = tree - closed)
 }
 
+#' Check the shape of RiemannFinMath's European call values in the strike (chapter 10): for strikes in
+#' increasing order, the value does not increase, the drop between two strikes is at most
+#' `(K2 - K1) * B`, and for each three consecutive strikes (not necessarily evenly spaced)
+#' `(K3 - K1) C(K2) <= (K3 - K2) C(K1) + (K2 - K1) C(K3)`.
+#'
+#' The bond price `B` of chapter 10 is taken here as `exp(-rT)`, an assumption added for this
+#' Black-Scholes example (flat continuously compounded rate); R computes only that factor.
+#'
+#' @return A list with `pairs` and `triples`, tibbles of the values and the checks.
+check_call_strike_shape_LAD <- function(example, strikes) {
+  check_riemann_package_LAD()
+  strikes <- sort(strikes)
+  calls <- purrr::map_dbl(strikes, \(k) {
+    RiemannFinMath::compute_european_option_value(
+      "call", example$spot, k, example$rate, example$dividend_yield, example$volatility, example$time
+    )$value
+  })
+  bond <- exp(-example$rate * example$time)
+  n <- length(strikes)
+  pairs <- tibble::tibble(
+    K1 = strikes[-n], K2 = strikes[-1], C1 = calls[-n], C2 = calls[-1],
+    spread_bound = (K2 - K1) * bond,
+    decreasing = C2 <= C1,
+    within_bound = C1 - C2 <= spread_bound
+  )
+  i <- seq_len(n - 2)
+  triples <- tibble::tibble(
+    K1 = strikes[i], K2 = strikes[i + 1], K3 = strikes[i + 2],
+    lhs = (K3 - K1) * calls[i + 1],
+    rhs = (K3 - K2) * calls[i] + (K2 - K1) * calls[i + 2],
+    convex = lhs <= rhs
+  )
+  list(pairs = pairs, triples = triples)
+}
+
 
 # ---- 6. shaping results into tables and figures --------------------------------------------------
 
