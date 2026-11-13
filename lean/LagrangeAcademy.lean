@@ -10,3 +10,4 @@ public import LagrangeAcademy.PartI.Ch04KernelAxioms
 public import LagrangeAcademy.PartI.Ch05TheoremProving
 public import LagrangeAcademy.PartI.Ch06StructuresClasses
 public import LagrangeAcademy.PartI.Ch07RealsFloats
+public import LagrangeAcademy.PartI.Ch08Probability

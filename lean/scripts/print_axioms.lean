@@ -111,3 +111,13 @@ import LagrangeAcademy
 #print axioms LagrangeAcademy.Ch07.discount_pos
 #print axioms LagrangeAcademy.Ch07.discount_le_one
 #print axioms LagrangeAcademy.Ch07.exp_one_bounds
+
+-- PartI/Ch08Probability.lean (Part I, chapter 8)
+#print axioms LagrangeAcademy.Ch08.FinProb.expect_const
+#print axioms LagrangeAcademy.Ch08.FinProb.expect_add
+#print axioms LagrangeAcademy.Ch08.FinProb.expect_smul
+#print axioms LagrangeAcademy.Ch08.FinProb.expect_nonneg
+#print axioms LagrangeAcademy.Ch08.FinProb.expect_mono
+#print axioms LagrangeAcademy.Ch08.integral_eq_sum
+#print axioms LagrangeAcademy.Ch08.Binomial.expect_stock
+#print axioms LagrangeAcademy.Ch08.Binomial.discounted_expect_nonneg

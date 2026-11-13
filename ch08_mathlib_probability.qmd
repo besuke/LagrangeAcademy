@@ -1,3 +1,254 @@
 # Mathlibの数学構造と確率論
 
-【執筆予定】この章の中心の問い：確率論の概念は、Leanでどのように表現されるのか。
+```{r}
+#| label: setup-ch08
+#| include: false
+source("R/utility_LAD.R", encoding = "UTF-8")
+```
+
+この章の問いは、**確率論の概念は、Lean でどのように表現されるのか**である。金融数学の価格は、確率測度（リスク中立測度）のもとでの期待値として表される。その確率測度・確率変数・期待値を、Lean の型で書く。次の順に進む。
+
+1. 有限の確率空間を、第6章の構造体として自分で定義する。期待値の線形性と単調性を証明する。
+2. Mathlib の測度論では、同じものがどう表されるか。有限の場合、積分は有限和になる。
+3. 金融数学への接続：第6章の二項モデルのリスク中立確率のもとで、危険資産の割り引いた価格の期待値が今日の価格に等しいことを示す。
+4. 連続時間への橋渡し：Mathlib と brownian-motion プロジェクトにある Brownian motion とマルチンゲールの定義を読む。
+
+## 問題提起：確率を型で書く
+
+1 期間の二項モデルで、危険資産の価格は 1 期後に $s_0 u$ か $s_0 d$ になる。第6章で定義したリスク中立確率 $q$ で重みをつけた期待値は
+
+$$
+q \cdot s_0 u + (1 - q) \cdot s_0 d
+$$
+
+である。この式を Lean で書くには、「上がる・下がる」という結果の集合、その上の確率、確率変数、期待値を、それぞれ型と定義で表す必要がある。
+
+結果が有限個なら、確率は「各結果の重み」、期待値は「重みつきの和」で足りる。しかし、連続時間のモデルでは、結果の集合（たとえば、連続な経路全体）は非可算で、1 つ 1 つの結果の確率は 0 になる。そのときは、測度と積分が必要になる。Mathlib は測度論の言葉で確率論を書いている。この章では、有限の場合を自分の定義で書いたうえで、Mathlib の測度論の定義と対応させる。
+
+## 数学的背景
+
+### 有限の確率空間
+
+結果の集合 $\Omega$ が有限のとき、確率は関数 $p : \Omega \to \mathbb{R}$ で、
+
+$$
+p(\omega) \ge 0, \qquad \sum_{\omega \in \Omega} p(\omega) = 1
+$$
+
+を満たすものである。確率変数は関数 $X : \Omega \to \mathbb{R}$、期待値は $E[X] = \sum_{\omega} p(\omega) X(\omega)$ である。期待値は線形で（$E[X + Y] = E[X] + E[Y]$、$E[cX] = cE[X]$）、単調である（$X \le Y$ なら $E[X] \le E[Y]$）。
+
+### 測度論による確率論
+
+一般の場合は、Kolmogorov の公理系による。
+
+- **可測空間** $(\Omega, \mathcal{F})$：$\mathcal{F}$ は、確率を割り当てる部分集合（事象）の族で、$\sigma$-加法族である。
+- **確率測度** $P$：$\mathcal{F}$ の上の測度で、$P(\Omega) = 1$。
+- **確率変数**：可測な関数 $X : \Omega \to \mathbb{R}$。
+- **期待値**：積分 $E[X] = \int X \, dP$。
+
+有限の $\Omega$ で、すべての 1 点集合が可測なら、積分は $\sum_{\omega} P(\{\omega\}) X(\omega)$ になる。有限の確率空間は、測度論の確率論の特別な場合である。
+
+### 確率過程とマルチンゲール
+
+時間 $t$ ごとの確率変数の族 $(X_t)$ を**確率過程**という。時間とともに増える情報を、$\sigma$-加法族の増大列（**フィルトレーション**）$(\mathcal{F}_t)$ で表す。$X$ が $(\mathcal{F}_t)$ に適合していて、$s \le t$ なら条件つき期待値が $E[X_t \mid \mathcal{F}_s] = X_s$ を満たすとき、$X$ を**マルチンゲール**という。「今の情報のもとでの将来の値の予測が、今の値に等しい」という性質である。
+
+無裁定価格理論の中心の定理（資産価格の基本定理）は、おおまかには「市場に裁定がないことと、割り引いた価格過程がマルチンゲールになる確率測度（同値マルチンゲール測度）が存在することは同値である」と述べる。この章では、その最も簡単な場合の、1 期間の 1 つの等式だけを証明する。
+
+## Lean による説明
+
+コードは、Lean が検査したファイル `lean/LagrangeAcademy/PartI/Ch08Probability.lean` から読み込んで示す。`#print` などの結果は、確認用のスクリプト `lean/scripts/ch08_checks.lean`（この節の最後に示す）を 2026-11-13 に `lean/` で実行したものである。
+
+### 有限の確率空間を定義する
+
+第6章の構造体の考え方で、確率と、それが満たす 2 つの条件をまとめる。
+
+```{r}
+#| label: lean-fin-prob
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch08Probability", "FinProb")
+show_lean_declaration_LAD("PartI/Ch08Probability", "expect")
+```
+
+`[Fintype Ω]` は、`Ω` が有限の型であるという型クラスの仮定である（第6章）。有限和 `∑ ω, …` は、このインスタンスがあって初めて書ける。
+
+和が 1 にならない重みでは、`FinProb` の要素を作れない。確認用のスクリプトの 1 番目で、`Bool` の 2 つの結果にそれぞれ $1/3$ を与えると、`sum_one` の証明が `False` に簡約されて失敗する。
+
+```text
+ch08_checks.lean:18:13: error: unsolved goals
+⊢ False
+```
+
+### 期待値の性質
+
+```{r}
+#| label: lean-expect-props
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch08Probability", "expect_const")
+show_lean_declaration_LAD("PartI/Ch08Probability", "expect_add")
+show_lean_declaration_LAD("PartI/Ch08Probability", "expect_smul")
+show_lean_declaration_LAD("PartI/Ch08Probability", "expect_nonneg")
+show_lean_declaration_LAD("PartI/Ch08Probability", "expect_mono")
+```
+
+`expect_const` だけが、確率の和が 1 であること（`P.sum_one`）を使う。線形性と単調性は、有限和の性質（Mathlib の `Finset.sum_add_distrib`、`Finset.mul_sum`、`Finset.sum_le_sum`）と、確率が非負であること（`P.nonneg`）から出る。どの定理がどの仮定を使うかが、証明の中に名前で現れている。
+
+### Mathlib の測度論との対応
+
+Mathlib では、確率測度は `μ : Measure Ω` と型クラスの仮定 `[IsProbabilityMeasure μ]` で表し、期待値は積分 `∫ ω, f ω ∂μ` で表す。有限の型の上では、積分は 1 点集合の測度で重みをつけた和になる。
+
+```{r}
+#| label: lean-integral-eq-sum
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch08Probability", "integral_eq_sum")
+```
+
+この証明は、Mathlib の `MeasureTheory.integral_fintype`（`Mathlib/MeasureTheory/Integral/Bochner/SumMeasure.lean`）を使う。その仮定は次のとおりである。
+
+```text
+@MeasureTheory.integral_fintype : ∀ {X : Type u_1} {E : Type u_2} {mX : MeasurableSpace X} [inst : NormedAddCommGroup E]
+  {f : X → E} [inst_1 : NormedSpace ℝ E] [CompleteSpace E] [MeasurableSingletonClass X] {μ : MeasureTheory.Measure X}
+  [inst_4 : Fintype X], MeasureTheory.Integrable f μ → ∫ (x : X), f x ∂μ = ∑ x, μ.real {x} • f x
+```
+
+Mathlib の定理は、可積分性 `Integrable f μ` を仮定に置いている。有限の型の上でも、測度が無限（1 点の測度が $\infty$）なら関数は可積分とは限らないからである。この章の定理では、確率測度であること（測度が有限）から、`Integrable.of_finite` で可積分性を得て、この仮定を満たしている。**Mathlib の定理を使うときは、その仮定を、自分の状況で 1 つずつ満たす必要がある**。
+
+`FinProb` の `prob ω` が、Mathlib の `μ.real {ω}`（1 点集合の測度を実数にしたもの）にあたる。この章では、`FinProb` から Mathlib の測度を作る対応そのものは証明していない（演習 4）。
+
+### 型クラスの階層としての確率論
+
+`integral_fintype` の仮定には、第6章の型クラスがいくつも現れている。
+
+- `[MeasurableSpace X]`、`[MeasurableSingletonClass X]`：`X` の可測構造と、1 点集合が可測であること。
+- `[NormedAddCommGroup E]`、`[NormedSpace ℝ E]`、`[CompleteSpace E]`：値の空間 `E` が完備なノルム空間（Banach 空間）であること。積分は実数値に限らず、この構造を持つ空間の値の関数に定義されている。
+- `[Fintype X]`：`X` が有限であること。
+
+`E := ℝ` とすると、これらのインスタンスはすべて Mathlib にあり、Lean がインスタンスの探索で埋める。
+
+### Lean が受け付けない例と、Mathlib の定義
+
+確認用のスクリプトの全体を示す。
+
+```{r}
+#| label: lean-ch08-checks
+#| echo: false
+#| output: asis
+show_lean_script_LAD("ch08_checks")
+```
+
+## 検証
+
+2026-11-13 に `lean/` で次を実行した。どれにも `timeout` をつけた。
+
+- `lake env lean LagrangeAcademy/PartI/Ch08Probability.lean`（第8章のファイルだけ）：エラーも警告もなし。
+- `lake build`：警告なし。
+- `lake env lean scripts/print_axioms.lean`：結果は次のとおりである。
+
+| 定理 | 内容 | 依存する公理 |
+|---|---|---|
+| `FinProb.expect_const`、`expect_add`、`expect_smul`、`expect_nonneg`、`expect_mono` | 有限の確率空間の期待値の性質 | `propext`、`Classical.choice`、`Quot.sound` |
+| `integral_eq_sum` | Mathlib の積分と有限和の対応 | `propext`、`Classical.choice`、`Quot.sound` |
+| `Binomial.expect_stock` | リスク中立確率のもとでの株価の期待値（次の節） | `propext`、`Classical.choice`、`Quot.sound` |
+| `Binomial.discounted_expect_nonneg` | 非負の支払いの割り引いた期待値（次の節） | `propext`、`Classical.choice`、`Quot.sound` |
+
+どの定理も、標準の 3 つの公理だけに依存する。実数と Mathlib の有限和を使っているので、第7章の実数の定理と同じく、3 つすべてに依存している。
+
+最初の版では、Mathlib の古い名前（`Mathlib.Data.Real.Basic` の読み込み、`if_true`・`if_false`）を使ったため、`lake env lean` が非推奨の警告を出した。それぞれ `Mathlib.Basic.Real.Basic`、`ite_true`・`ite_false` に直した（2026-11-13 の作業記録）。
+
+## 金融数学への接続
+
+### リスク中立確率のもとでの期待値
+
+第6章の 1 期間の二項モデル `OnePeriodBinomial` の係数を実数にとり、リスク中立確率 $q$ を、結果 `true`（上がる）と `false`（下がる）の上の確率にする。$q$ が $0$ と $1$ の間にあることは第6章で証明したので、`FinProb` の 2 つの条件の証明にそのまま使える。
+
+```{r}
+#| label: lean-risk-neutral
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch08Probability", "riskNeutral")
+show_lean_declaration_LAD("PartI/Ch08Probability", "stock")
+```
+
+このリスク中立確率のもとで、危険資産の 1 期後の価格の期待値は、今日の価格の $(1 + r)$ 倍になる。
+
+$$
+q \cdot s_0 u + (1 - q) \cdot s_0 d = (1 + r)\, s_0
+$$
+
+```{r}
+#| label: lean-expect-stock
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch08Probability", "expect_stock")
+```
+
+両辺を $1 + r$ で割ると、「安全資産で割り引いた危険資産の価格の期待値は、今日の価格に等しい」になる。これは、割り引いた価格過程が（1 期間で）リスク中立確率のもとでマルチンゲールになる、という性質の最も簡単な場合である。$q$ は、この等式が成り立つように選ばれた数である。
+
+支払いが非負の派生証券については、割り引いた期待値も非負である。
+
+```{r}
+#| label: lean-discounted-expect-nonneg
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch08Probability", "discounted_expect_nonneg")
+```
+
+### 示したことと、示していないこと
+
+- **示したこと**：仮定 $0 < d < 1 + r < u$ のもとで、$q$ が確率になり、そのもとで危険資産の割り引いた価格の期待値が今日の価格に等しいこと。支払いが非負なら、割り引いた期待値も非負であること。
+- **示していないこと**：
+  - 割り引いた期待値 $E_q[V]/(1+r)$ が、派生証券の**無裁定価格**であること。そのためには、派生証券を危険資産と安全資産で複製できることと、第2章の `NoArbitrage` から価格が一意に決まることを示す必要がある。
+  - 1 期間の二項モデルで、無裁定であることと、このようなリスク中立確率が存在することが同値であること（資産価格の基本定理の最も簡単な場合）。
+  - 多期間・連続時間への拡張。
+
+これらは第II部の課題である。名前 `riskNeutral` は、それが「リスク中立測度」であることを証明しない。この章で Lean が確かめたのは、定義した重みが確率であることと、上の等式だけである。
+
+### 連続時間への橋渡し
+
+連続時間のモデルでは、危険資産の価格を Brownian motion で駆動する。Mathlib（この本が使う v4.35.0）には、Brownian motion の定義がすでにある（`Mathlib/Probability/BrownianMotion/Basic.lean`）。確認用のスクリプトの 4 番目で `#print` した結果を、要点だけ抜き出す。
+
+```text
+structure ProbabilityTheory.IsBrownianReal ... (X : NNReal → Ω → ℝ) (P : MeasureTheory.Measure Ω := by volume_tac) : Prop
+parents:
+  ProbabilityTheory.IsBrownianReal.toIsPreBrownianReal : ProbabilityTheory.IsPreBrownianReal X P
+fields:
+  ProbabilityTheory.IsPreBrownianReal.hasLaw : ∀ (I : Finset NNReal),
+      ProbabilityTheory.HasLaw (fun ω => I.restrict fun x => X x ω) (ProbabilityTheory.BrownianReal.projectiveFamily I)
+        P
+  ProbabilityTheory.IsBrownianReal.cont : ∀ᵐ (ω : Ω) ∂P, Continuous fun x => X x ω
+```
+
+読み方は次のとおりである。
+
+- `X : NNReal → Ω → ℝ` は、非負の実数の時刻 $t$ ごとの確率変数、つまり確率過程である。
+- `IsPreBrownianReal` は、有限個の時刻での同時分布が、Brownian motion のもの（`projectiveFamily I`）であることを述べる。
+- `IsBrownianReal` は、それに加えて、ほとんどすべての $\omega$ で経路 $t \mapsto X_t(\omega)$ が連続であること（`cont`）を述べる。
+- どちらも `Prop` に値をとる構造体で、第6章の「仮定を構造体に置く」書き方である。
+
+Mathlib の `IsPreBrownianReal.hasLaw_sub` は、増分 $B_s - B_t$ の分布が平均 0、分散 $|s - t|$ の正規分布であることを述べる。確認用のスクリプトで `#print axioms` を実行すると、標準の 3 つの公理だけに依存していた。
+
+マルチンゲールの定義も Mathlib にある（`MeasureTheory.Martingale`）。`#print` すると、「適合していて、$i \le j$ なら条件つき期待値 `μ[f j | ℱ i]` が `f i` にほぼ確実に等しい」という、数学的背景で述べた定義そのものである。
+
+```text
+  MeasureTheory.StronglyAdapted ℱ f ∧ ∀ (i j : ι), i ≤ j → μ[f j | ↑ℱ i] =ᵐ[μ] f i
+```
+
+Mathlib にあるのは、ここでは**定義**と、その性質の定理である。Mathlib v4.35.0 で `IsBrownianReal` という名前が現れるファイルは `Mathlib/Probability/BrownianMotion/Basic.lean` だけで、そこに `IsBrownianReal` を満たす過程を構成する定理は見つからなかった（名前を検索して読んだ範囲での確認）。**Brownian motion が存在すること**、つまり `IsBrownianReal` を満たす過程を実際に構成することは、brownian-motion プロジェクト（<https://github.com/RemyDegenne/brownian-motion>、コミット `8fd8dc5`、2026-11-05）で行われている。作業用のフォルダーに clone して読んだ（ビルドはしていない）ところ、`BrownianMotion/Gaussian/BrownianMotion.lean` に次の宣言があった。
+
+- `brownian`（426 行目）：前 Brownian motion の連続な修正として定義した過程。
+- `isBrownianReal_brownian`（444 行目）：`brownian` が `IsBrownianReal` を満たすという定理。
+- `IsPreBrownianReal.isMartingale`（169 行目）：フィルトレーションつきの前 Brownian motion がマルチンゲールであるという補題。
+
+同じファイルに `sorry` という語は見つからなかった。リポジトリ全体では、`sorry` という語を含むファイルが 10 個あり、1 つ（`Gaussian/IteratedLogarithm.lean`）を除いて、確率積分の部分（`StochasticIntegral/`）にあった。それが証明の `sorry` か、コメントの中の語かは調べていない。ただし、このプロジェクトは Lean 4.36.0-rc2 の上にあり、この本の環境（Lean 4.35.0）ではビルドしていないので、これらの定理が検査を通ることは**確かめていない**。README は、Brownian motion の形式化は完了し、確率積分と伊藤の公式は進行中だと述べている。これはプロジェクトの自己申告である。
+
+有限の確率空間の上で、この章で書いた「期待値」「割り引いた価格の期待値が今日の価格に等しい」は、連続時間では「積分」「割り引いた価格過程がマルチンゲールになる」に置き換わる。そこに Girsanov の定理と伊藤の公式が加わって、Black–Scholes のモデルの無裁定価格理論になる。第II部では、この章の有限の場合から出発して、その道筋をたどる。
+
+## 演習
+
+1. `FinProb` で、`E[X - Y] = E[X] - E[Y]` を示せ。`expect_add` と `expect_smul` から導けるか。
+2. 2 つの確率変数がどの結果でも等しいなら期待値も等しいことを示せ。`expect_mono` を 2 回使う証明と、`congr` を使う証明を比べよ。
+3. `Binomial.expect_stock` の証明で、どこで仮定 `d < u` を使っているか（ヒント：`field_simp` は分母が 0 でないことを必要とする）。
+4. `FinProb Ω` から、Mathlib の測度 `∑ ω, (P.prob ω) • Measure.dirac ω` を作り、それが確率測度であること、その積分が `P.expect` に等しいことを示せ。どの型クラスの仮定が必要になるか。
+5. 1 期間の二項モデルで、支払いが $V_u$、$V_d$ の派生証券を、危険資産 $\Delta$ 単位と安全資産で複製する $\Delta$ を求め、複製の費用が $E_q[V]/(1+r)$ に等しいことを示せ。これは、この章で示していないことのどれを示したことになるか。
