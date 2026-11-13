@@ -19,7 +19,7 @@ import Mathlib.Tactic.Ring
 - 利得ベクトル：ポートフォリオ `θ` に、`(-cost θ, payoff θ ω)` を対応させる（`gainVector`）。
   座標の添字は `Option Ω` で、`none` が `-cost` の座標、`some ω` が状態 `ω` の支払いの座標。
   その像は線形部分空間である（`gainSubspace`）。
-- 無裁定 ⟺ 利得部分空間と標準単体が交わらない（`noArbitrage_iff_disjoint`）。
+- 無裁定 ⟺ 利得部分空間と非負単体が交わらない（`noArbitrage_iff_disjoint`）。
 - 逆向き：Mathlib の強い分離定理 `geometric_hahn_banach_compact_closed` で、単体と利得部分空間を
   分離する線形汎関数を得る。それは部分空間の上で 0、単体の上で負なので、符号を変えるとすべての
   座標が正の線形汎関数になり、その比が正の状態価格になる。
@@ -102,7 +102,7 @@ theorem isCompact_simplex : IsCompact (simplex Ω) := by
 
 /-! ## 無裁定と、単体との交わり -/
 
-/-- 無裁定 ⟺ 利得部分空間と標準単体が交わらない。 -/
+/-- 無裁定 ⟺ 利得部分空間と非負単体が交わらない。 -/
 theorem noArbitrage_iff_disjoint (M : FiniteMarket I Ω) :
     M.NoArbitrage ↔ Disjoint (simplex Ω) (gainSubspace M : Set (Option Ω → ℝ)) := by
   rw [Set.disjoint_left]

@@ -254,6 +254,7 @@ ch12_checks.lean:24:57: error: unsolved goals
 - `lake env lean LagrangeAcademy/PartII/Ch12FTAP.lean`（第12章のファイルだけ）：エラーも警告もなし。
 - `lake build`：警告なし。
 - `lake env lean scripts/print_axioms.lean`：第12章の 13 の定理は、すべて `propext`、`Classical.choice`、`Quot.sound` だけに依存した。中心の定理 `exists_statePrice_of_noArbitrage` も同じである。
+- `lake env lean scripts/ch12_checks.lean`（確認用のスクリプト）：エラーは 4 番目の 1 件（`unsolved goals`）だけだった。これは、$\pi = 0.7$ では正の状態価格の構成が失敗することを示すために**意図して置いたエラー**で、ライブラリの定理の検査（上の 3 つ）には含まれない。確認用のスクリプトは `lake build` の対象ではない。
 
 途中の版では、Mathlib の非推奨の名前（`stdSimplex` とその定理、`Set.setOf_forall`、`continuous_finset_sum`）による警告と、Mathlib のリンターの警告（ゴールを変える `show`、結果の形を指定しない `simp`）が出た。どれも直して、警告のない状態にした。
 
