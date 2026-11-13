@@ -1,3 +1,289 @@
 # 実数と数値計算
 
-【執筆予定】この章の中心の問い：なぜ数学の実数とコンピュータの浮動小数点数は異なるのか。
+```{r}
+#| label: setup-ch07
+#| include: false
+source("R/utility_LAD.R", encoding = "UTF-8")
+```
+
+この章の問いは、**なぜ数学の実数とコンピュータの浮動小数点数は異なるのか**である。金融数学の価格の式は実数 $\mathbb{R}$ の上で述べられ、RiemannFinMath のような数値計算のプログラムは浮動小数点数で計算する。この 2 つは、同じ「数」ではない。次の順に進む。
+
+1. 有理数・実数・浮動小数点数は、Lean ではそれぞれどう作られているか。
+2. 数学的に決定可能であること、Lean で証明できること、効率よく計算できることの違い。
+3. 実数の定理：第1章のペイオフの恒等式を実数に広げ、割引係数の範囲を示す。
+4. 浮動小数点数の定理：Lean 4.35.0 では、`Float` の性質もカーネルの計算で証明できる。
+5. 金融数学への接続：RiemannFinMath の数値が、実数の上の関係をどこまで満たすか。
+
+## 問題提起：0.1 + 0.2 は 0.3 か
+
+実数では $0.1 + 0.2 = 0.3$ である。ところが、多くのプログラミング言語で `0.1 + 0.2 == 0.3` を評価すると「偽」になる。R でも同じである。
+
+```{r}
+#| label: r-float-sum
+sprintf("%.17g", 0.1 + 0.2)
+0.1 + 0.2 == 0.3
+```
+
+これは R の誤りではない。R の数値は IEEE 754 の倍精度の浮動小数点数で、$0.1$ は 2 進数では有限の桁で表せないので、最も近い表せる数に丸められている。丸めた数どうしの和は、$0.3$ を丸めた数と一致しない。
+
+金融の計算では、この違いが至るところに入る。プット・コール・パリティのように、実数の上では等式で成り立つ関係も、浮動小数点数で計算した値の上では、丸めの誤差の分だけずれる。この章では、**実数の数学的な性質**と、**浮動小数点数の数値計算の上での性質**を、Lean の中で分けて扱う。
+
+## 数学的背景
+
+### 3 つの「数」
+
+| | 有理数 $\mathbb{Q}$ | 実数 $\mathbb{R}$ | 倍精度の浮動小数点数 |
+|---|---|---|---|
+| 要素 | 整数の比 $p/q$ | 有理数のコーシー列の同値類（構成の一例） | 64 ビットのビット列（$\pm\infty$、NaN を含む） |
+| 演算 | 体の演算。正確 | 体の演算。完備で、極限がとれる | 丸めを含む演算。体ではない |
+| 計算機の上で | 正確に計算できる（桁は増えうる） | 一般には計算できない | 速く計算できる（ハードウェア） |
+
+浮動小数点数の足し算は、実数の足し算に**丸め**を合成したものである。丸めのために、結合法則 $(a + b) + c = a + (b + c)$ が成り立たないことがあり、大きな数に小さな数を足すと小さな数が消えること（情報落ち）もある。浮動小数点数は、実数の近似としては有用だが、実数と同じ代数の法則は満たさない。
+
+### 決定可能性・証明可能性・計算の効率
+
+「$a = b$ を確かめる」と言うとき、少なくとも 3 つの違う問いがある。
+
+1. **数学的な決定可能性**：その種類の命題の真偽を、すべての場合に正しく判定するアルゴリズムが存在するか。
+   - 有理数の等式は決定可能である。分子と分母を比べればよい。
+   - 実数の等式は、計算可能な実数（任意の精度で近似できる実数）に限っても、一般には決定可能でない。近似をどれだけ細かくしても、2 つの数が等しいのか、まだ見ていない桁で違うのかを判定できない。
+   - 浮動小数点数の等式は決定可能である。有限のビット列を比べればよい。
+2. **Lean での証明可能性**：個々の命題について、Lean が検査する証明を書けるか。決定可能でない種類の命題でも、個々の命題は証明できることが多い。実数の $(1 + 1 = 2)$ は、判定のアルゴリズムがなくても、`norm_num` で証明できる。
+3. **計算の効率**：判定や証明に、どれだけの時間がかかるか。判定の手続きがあっても、カーネルの中で実行すると遅い、あるいは定義の形のために簡約が進まない、ということがある。
+
+第5章で見たとおり、`decide` が使えるのは、命題の `Decidable` のインスタンスがあり、カーネルがそれを計算で `true` か `false` まで簡約できるときである。この章では、3 つの問いが一致しない例を、Lean の中で実際に見る。
+
+### 古典論理と `Decidable`
+
+古典論理では、どの命題も真か偽かのどちらかである（排中律）。Mathlib はこの立場から、実数の等式にも `Decidable` のインスタンスを与えている。ただしそれは選択公理を使った **noncomputable** なインスタンスで、真偽を計算する手続きではない。「インスタンスがある」ことと「計算できる」ことは別である。
+
+## Lean による説明
+
+コードは、Lean が検査したファイル `lean/LagrangeAcademy/PartI/Ch07RealsFloats.lean` から読み込んで示す。エラーや `#eval`・`#print` の結果は、確認用のスクリプト `lean/scripts/ch07_checks.lean`（この節の最後に示す）を 2026-11-13 に `lean/` で実行したものである。
+
+### 有理数
+
+有理数は正確に計算できる。`#eval (1 / 10 + 2 / 10 : ℚ)` は `3 / 10` を表示する。等式の証明には `norm_num` を使う。
+
+```{r}
+#| label: lean-rat-add
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch07RealsFloats", "rat_add")
+```
+
+同じ等式を `decide` で証明しようとすると、失敗する。この章を書いているとき、最初は `rat_add` を `by decide` で書き、`lake build` が次のエラーを出した（2026-11-13 の作業記録。確認用のスクリプトには、実行するコードではなくコメントとして残している）。
+
+```text
+Tactic `decide` failed to reduce
+  @decide (1 / 10 + 2 / 10 = 3 / 10) (instDecidableEqRat (1 / 10 + 2 / 10) (3 / 10))
+to `true` or `false`.
+...reduction got stuck at
+  match ((1 / 10).add (2 / 10)).num, (Rat.mul 3 (Rat.inv 10)).num with ...
+```
+
+有理数の等式は数学的に決定可能で、`Decidable` のインスタンス `instDecidableEqRat` もある。それでも、カーネルの簡約が、有理数の足し算や逆数の定義の途中で止まった。なぜそこで止まるのか（どの定義が展開されないのか）は確かめていない。**決定可能であることと、`decide` で証明できることは別**である。
+
+### 実数
+
+Mathlib の実数は、有理数のコーシー列の同値類を包んだ構造体である。
+
+```text
+structure Real : Type
+number of parameters: 0
+fields:
+  Real.cauchy : CauSeq.Completion.Cauchy abs
+constructor:
+  Real.ofCauchy (cauchy : CauSeq.Completion.Cauchy abs) : ℝ
+```
+
+同値類は第4章の商型で作られている。実数の等式は、実数の性質を使って証明する。
+
+```{r}
+#| label: lean-real-add
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch07RealsFloats", "real_add")
+```
+
+`norm_num` は、数の式を記号の上で正規化し、その途中の各段階を実数の体の公理と順序の性質から証明する。実数を「計算」しているのではない。
+
+`decide` では証明できない。Mathlib の実数の等式のインスタンスは、選択公理を使った noncomputable なものだからである。Lean は、簡約が `Classical.choice` で止まったと報告する。
+
+```text
+ch07_checks.lean:38:32: error: Tactic `decide` failed to reduce
+  @decide (1 + 1 = 2) ((1 + 1).decidableEq 2)
+to `true` or `false`.
+
+After unfolding the instances `Classical.propDecidable`, `LinearOrder.toDecidableEq`, and `Real.decidableEq`, reduction got stuck at
+  Classical.choice ⋯
+```
+
+`#eval (1 : ℝ) + 1` は、エラーにならず次を表示した。
+
+```text
+Real.ofCauchy (sorry /- 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, ... -/)
+```
+
+これは、Mathlib が表示のために用意した `unsafe` なインスタンス（`Mathlib/Basic/Real/Basic.lean` の `Repr ℝ`）が、内部のコーシー列の項を並べたものである。その説明には「同じ実数でも、違うコーシー列が表示されうる」とある。小数の値ではなく、実数の値を計算したわけでもない。表示の中の `sorry` は、表示できない部分（コーシー列であることの証明と考えられる。未確認の推定）の代わりに置かれたもので、どの定理の証明にも入っていない。
+
+### 浮動小数点数
+
+Lean 4.35.0 の `Float` は、IEEE 754 の倍精度のビット列の論理モデル `Float.Model` を包んだ構造体である。
+
+```text
+structure Float : Type
+number of parameters: 0
+fields:
+  Float.toModel : Float.Model
+constructor:
+  Float.ofModel (toModel : Float.Model) : Float
+structure Float.Model : Type
+number of parameters: 0
+fields:
+  Float.Model.toBits : UInt64
+  Float.Model.valid : Float.Model.Format.binary64.Valid self.toBits.toBitVec
+constructor:
+  Float.Model.mk (toBits : UInt64) (valid : Float.Model.Format.binary64.Valid toBits.toBitVec) : Float.Model
+```
+
+足し算 `Float.add` は、Lean 本体のソース（`src/lean/Init/Data/Float/Float.lean`）で、モデルの足し算として定義され、`@[extern "lean_float_add"]` がついている。その説明には「論理のモデルを持ち、C の足し算にコンパイルされる」とある。つまり、**2 つの意味**がある。
+
+- **カーネルの中の意味**：モデルの上の演算。カーネルはこれを簡約できるので、`decide` で `Float` の性質を証明できる。
+- **実行したときの意味**：`#eval` やコンパイルしたプログラムは、C の演算（ハードウェアの浮動小数点演算）を使う。
+
+2 つが一致することは、カーネルが確かめることではない。第4章の `native_decide` と同じく、コンパイラと実行環境への信頼である。
+
+モデルの上で、浮動小数点数の性質を証明する。
+
+```{r}
+#| label: lean-float
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch07RealsFloats", "float_add_ne")
+show_lean_declaration_LAD("PartI/Ch07RealsFloats", "float_add_not_assoc")
+show_lean_declaration_LAD("PartI/Ch07RealsFloats", "float_absorb")
+show_lean_declaration_LAD("PartI/Ch07RealsFloats", "float_zero_ne_neg_zero")
+```
+
+この 4 つは、`native_decide` ではなく `decide` で証明したので、カーネルが計算して検査した定理である。述べているのは**モデルの浮動小数点数**についての事実であり、実数についての事実ではない。`(0.1 : Float)` は、実数の $1/10$ ではなく、それに最も近い倍精度の数である。
+
+最後の定理は、`=` と `==` の違いを示している。`=` は Lean の等号で、モデルとして同じ値かを述べる。`==` は IEEE 754 の比較で、`0.0 == -0.0` は `true` になる（確認用のスクリプトの 4 番目）。NaN は、IEEE 754 の比較では自分自身とも等しくない。浮動小数点数の「等しい」には、少なくとも 2 つの意味がある。
+
+計算の効率についての一例も記録しておく。この環境で、第7章のファイルだけを `lake env lean` で検査すると、`Float` の 4 つの定理を加える前は約 24 秒、加えた後は約 89 秒かかった（どちらも Mathlib の読み込みを含む、1 回だけの測定）。同じ計算を `#eval` で実行すると、すぐに終わる。カーネルはビット列のモデルを 1 段ずつ簡約するので、ハードウェアの演算よりはるかに遅い。
+
+### 3 つの問いの比較
+
+| 命題 | 数学的に決定可能か | Lean での証明 | `decide` |
+|---|---|---|---|
+| `(1/10 + 2/10 : ℚ) = 3/10` | 可能 | `norm_num` | 簡約が止まり、失敗 |
+| `(0.1 + 0.2 : ℝ) = 0.3` | 実数の等式は一般には不可能 | `norm_num` | インスタンスが noncomputable で、失敗 |
+| `(0.1 + 0.2 : Float) ≠ 0.3` | 可能 | `decide` | 成功（カーネルがモデルで計算） |
+
+### Lean が受け付けない例
+
+確認用のスクリプトの全体を示す。
+
+```{r}
+#| label: lean-ch07-checks
+#| echo: false
+#| output: asis
+show_lean_script_LAD("ch07_checks")
+```
+
+## 検証
+
+2026-11-13 に `lean/` で次を実行した。長く止まる場合に備えて、どれにも `timeout` をつけた。
+
+- `lake env lean LagrangeAcademy/PartI/Ch07RealsFloats.lean`（第7章のファイルだけ）：エラーも警告もなし。
+- `lake build`：警告なし。
+- `lake env lean scripts/print_axioms.lean`：結果は次のとおりである。
+
+| 定理 | 内容 | 依存する公理 |
+|---|---|---|
+| `rat_add`、`real_add` | 有理数と実数の等式（`norm_num`） | `propext`、`Classical.choice`、`Quot.sound` |
+| `float_add_ne`、`float_add_not_assoc`、`float_absorb`、`float_zero_ne_neg_zero` | 浮動小数点数のモデルの性質（`decide`） | `propext`、`Classical.choice`、`Quot.sound` |
+| `call_sub_put_payoff_real` | 実数のペイオフの恒等式（次の節） | `propext`、`Classical.choice`、`Quot.sound` |
+| `discount_pos`、`discount_le_one` | 割引係数の範囲（次の節） | `propext`、`Classical.choice`、`Quot.sound` |
+| `exp_one_bounds` | `exp 1` の上下限（次の節） | `propext`、`Classical.choice`、`Quot.sound` |
+
+すべての定理が、標準の 3 つの公理に依存し、それ以外には依存しない。実数を使う定理が 3 つすべてに依存するのは、Mathlib の実数の構成（商型と選択公理）を使っているためと考えられる。`decide` で証明した `Float` の定理が `Classical.choice` に依存する理由は確かめていない（未確認）。
+
+## 金融数学への接続
+
+### 実数の上の定理
+
+第1章では、整数の価格でペイオフの恒等式 $\max(s - k, 0) - \max(k - s, 0) = s - k$ を `omega` で示した。実数では `omega` は使えないので、$s$ と $k$ の大小で場合を分ける。
+
+```{r}
+#| label: lean-call-sub-put-real
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch07RealsFloats", "call_sub_put_payoff_real")
+```
+
+連続複利の割引係数 $e^{-rT}$ は、$r, T \ge 0$ なら $0 < e^{-rT} \le 1$ である。
+
+```{r}
+#| label: lean-discount
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch07RealsFloats", "discount_pos")
+show_lean_declaration_LAD("PartI/Ch07RealsFloats", "discount_le_one")
+```
+
+実数の値そのものは計算できないが、有理数で挟むことはできる。Mathlib は、$2.7182818283 < e < 2.7182818286$ を証明している（`Mathlib/Analysis/Complex/ExponentialBounds.lean` の `Real.exp_one_gt_d9` と `Real.exp_one_lt_d9`）。それを使って、小数 3 桁で挟む。
+
+```{r}
+#| label: lean-exp-one
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch07RealsFloats", "exp_one_bounds")
+```
+
+これは、第4章で触れた「証明書」の考え方の小さな例である。浮動小数点数で $e \approx 2.718281828459045$ と計算しても、それは実数 $e$ についての主張にならない。有理数の上下限を定理として証明すれば、実数についての主張になる。
+
+### RiemannFinMath の数値
+
+RiemannFinMath は倍精度の浮動小数点数で計算する。合成の値の例で、Black–Scholes のコールとプットの価格を計算する。
+
+```{r}
+#| label: r-vanilla-values
+example_vanilla <- create_vanilla_example_LAD()
+values_vanilla <- compute_vanilla_values_LAD(example_vanilla)
+show_table_LAD(values_vanilla, digits = 6)
+```
+
+入力は合成の値である（スポット 100、行使価格 100、利子率 1%、配当利回り 0、ボラティリティ 20%、満期 1 年）。
+
+無裁定から導かれるプット・コール・パリティ $C - P = S e^{-qT} - K e^{-rT}$ を、この数値で確かめる。左辺は RiemannFinMath の値の差、右辺は R が倍精度で計算した値である。
+
+```{r}
+#| label: r-put-call-parity
+show_table_LAD(check_put_call_parity_LAD(values_vanilla, example_vanilla))
+```
+
+差は $10^{-15}$ の桁で、0 ではない。これは、倍精度の丸めの誤差の大きさである（倍精度の相対的な精度はおよそ $2.2 \times 10^{-16}$）。ここからわかるのは、**この例で、パリティが丸めの誤差の範囲で成り立つ**ことだけである。パリティの証明ではなく、RiemannFinMath の実装が正しいことの証明でもない。実数の上の Black–Scholes の式がパリティを満たすことも、この本ではまだ証明していない（第II部の課題）。
+
+二項モデルの価格は、段数を増やすと Black–Scholes の価格に近づく。
+
+```{r}
+#| label: r-binomial-convergence
+binomial_vanilla <- compute_binomial_values_LAD(example_vanilla, c(10, 100, 1000))
+show_table_LAD(compare_binomial_with_closed_form_LAD(binomial_vanilla, values_vanilla), digits = 6)
+```
+
+この例では、差は段数にほぼ反比例して小さくなっている。この差は、浮動小数点数の丸めではなく、**モデルの近似の誤差**（離散化の誤差）である。数値計算の結果には、少なくとも 2 種類の誤差が入る。
+
+- **近似の誤差**：実数の上でも、二項モデルの価格と Black–Scholes の価格は違う。段数を増やせば近づくことは、実数の上の定理として述べられる（第1章で紹介した formal-mathfin の `binomialPrice_call_tendsto_bs_closed`。証明は第II部で扱う）。
+- **丸めの誤差**：浮動小数点数で計算するために入る誤差。実数の上の定理は、この誤差について何も述べない。
+
+実数の上で証明した定理は、浮動小数点数で計算した値がその定理を満たすことを保証しない。逆に、浮動小数点数の値が関係を満たしていても、実数の上の定理の証明にはならない。本書の保証の階段の段 2「数値の確認」は、この区別のうえで、RiemannFinMath の数値が無裁定から導いた関係を、この例で、丸めの誤差の範囲で満たすかを確かめるものである。
+
+## 演習
+
+1. `(0.1 + 0.2 : Float) ≠ 0.3` を `decide` で示した定理と、同じ命題を `native_decide` で示した場合とで、`#print axioms` の結果を比べよ（第4章）。この本の合格条件で認められるのはどちらか。
+2. `(1e16 : Float) + 1 = 1e16` を `decide` で示せ。実数で同じ式を述べると、成り立つか。
+3. プットのペイオフについて、`max (k - s) 0 ≤ k` を、`0 ≤ s` の仮定のもとで実数について示せ。仮定を外すと成り立つか。
+4. `Real.exp_one_gt_d9` と `Real.exp_one_lt_d9` を使って、$e^2$ を有理数で挟め（ヒント：$e^2 = e \cdot e$）。
+5. `compute_binomial_values_LAD` で段数を 1, 2, 4, …, 1024 と変え、Black–Scholes との差と段数の積がどうなるかを表にせよ。この表は何を示し、何を示さないか。

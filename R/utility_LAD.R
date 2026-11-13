@@ -301,6 +301,12 @@ format_prdc_example_inputs_LAD <- function(example) {
   )
 }
 
+#' The vanilla option example of chapter 7, with synthetic inputs (no market quotes): one spot, one
+#' strike, flat continuously compounded rates and one volatility.
+create_vanilla_example_LAD <- function() {
+  list(spot = 100, strike = 100, rate = 0.01, dividend_yield = 0, volatility = 0.2, time = 1)
+}
+
 
 # ---- 4. calling RiemannFinMath -------------------------------------------------------------------
 
@@ -333,6 +339,37 @@ compute_prdc_smile_values_LAD <- function(spots, curves, smile, terms) {
   purrr::map(spots, \(spot) {
     result <- compute_prdc_smile_value_LAD(curves, utils::modifyList(smile, list(spot = spot)), terms)
     tibble::add_column(result$summary, spot = spot, .before = 1)
+  }) |>
+    purrr::list_rbind()
+}
+
+#' The European call and put of a vanilla example, by RiemannFinMath's closed form
+#' (compute_european_option_value). The values are returned as they come.
+#'
+#' @param example The list of [create_vanilla_example_LAD()].
+#' @return A tibble with `option_type` and `value`.
+compute_vanilla_values_LAD <- function(example) {
+  check_riemann_package_LAD()
+  purrr::map(c("call", "put"), \(type) {
+    RiemannFinMath::compute_european_option_value(
+      type, example$spot, example$strike, example$rate, example$dividend_yield, example$volatility,
+      example$time
+    )[, c("option_type", "value")]
+  }) |>
+    purrr::list_rbind()
+}
+
+#' The European call of a vanilla example by RiemannFinMath's binomial tree
+#' (compute_binomial_option_value), for each number of steps.
+#'
+#' @return A tibble with `steps` and `value`.
+compute_binomial_values_LAD <- function(example, steps) {
+  check_riemann_package_LAD()
+  purrr::map(steps, \(n) {
+    RiemannFinMath::compute_binomial_option_value(
+      "call", "european", example$spot, example$strike, example$rate, example$dividend_yield,
+      example$volatility, example$time, steps = as.integer(n)
+    )[, c("steps", "value")]
   }) |>
     purrr::list_rbind()
 }
@@ -409,6 +446,28 @@ compare_prdc_flat_smile_LAD <- function(example, volatility) {
     closed_form = closed_form$summary$npv,
     difference = static_replication - closed_form
   )
+}
+
+#' Check put-call parity on RiemannFinMath's call and put values: `C - P = S exp(-qT) - K exp(-rT)`
+#' (a consequence of no-arbitrage; chapter 7). R computes only the right-hand side of the relation,
+#' in double precision, and the difference.
+check_put_call_parity_LAD <- function(values, example) {
+  call <- values$value[values$option_type == "call"]
+  put <- values$value[values$option_type == "put"]
+  rhs <- example$spot * exp(-example$dividend_yield * example$time) -
+    example$strike * exp(-example$rate * example$time)
+  tibble::tibble(
+    item = c("C - P（RiemannFinMath）", "S e^{-qT} - K e^{-rT}（R）", "差"),
+    value = c(sprintf("%.15f", call - put), sprintf("%.15f", rhs), sprintf("%.3e", (call - put) - rhs))
+  )
+}
+
+#' Compare RiemannFinMath's binomial values of a European call with its closed form, for each number of
+#' steps. Both are RiemannFinMath's; R only takes the differences.
+compare_binomial_with_closed_form_LAD <- function(binomial, values) {
+  tree <- binomial$value
+  closed <- values$value[values$option_type == "call"]
+  tibble::tibble(steps = binomial$steps, binomial = tree, closed_form = closed, difference = tree - closed)
 }
 
 

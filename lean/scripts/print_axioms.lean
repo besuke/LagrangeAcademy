@@ -99,3 +99,15 @@ import LagrangeAcademy
 #print axioms LagrangeAcademy.Ch06.OnePeriodBinomial.q_pos
 #print axioms LagrangeAcademy.Ch06.OnePeriodBinomial.q_lt_one
 #print axioms LagrangeAcademy.Ch06.exampleModel_q
+
+-- PartI/Ch07RealsFloats.lean (Part I, chapter 7)
+#print axioms LagrangeAcademy.Ch07.rat_add
+#print axioms LagrangeAcademy.Ch07.real_add
+#print axioms LagrangeAcademy.Ch07.float_add_ne
+#print axioms LagrangeAcademy.Ch07.float_add_not_assoc
+#print axioms LagrangeAcademy.Ch07.float_absorb
+#print axioms LagrangeAcademy.Ch07.float_zero_ne_neg_zero
+#print axioms LagrangeAcademy.Ch07.call_sub_put_payoff_real
+#print axioms LagrangeAcademy.Ch07.discount_pos
+#print axioms LagrangeAcademy.Ch07.discount_le_one
+#print axioms LagrangeAcademy.Ch07.exp_one_bounds

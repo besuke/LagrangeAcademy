@@ -9,3 +9,4 @@ public import LagrangeAcademy.PartI.Ch03DependentInductive
 public import LagrangeAcademy.PartI.Ch04KernelAxioms
 public import LagrangeAcademy.PartI.Ch05TheoremProving
 public import LagrangeAcademy.PartI.Ch06StructuresClasses
+public import LagrangeAcademy.PartI.Ch07RealsFloats
