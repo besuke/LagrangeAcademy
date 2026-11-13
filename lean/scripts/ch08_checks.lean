@@ -23,7 +23,7 @@ noncomputable def rejected_prob : FinProb Bool where
 -- 3. Mathlib のマルチンゲールの定義：適合していて、s ≤ t なら条件つき期待値 μ[f t | ℱ s] が f s にほぼ確実に等しい
 #print MeasureTheory.Martingale
 
--- 4. Mathlib（v4.35.0）にある Brownian motion の定義（brownian-motion プロジェクトから移されたもの）
+-- 4. Mathlib v4.35.0 にある Brownian motion の定義
 #print ProbabilityTheory.IsPreBrownianReal
 #print ProbabilityTheory.IsBrownianReal
 
