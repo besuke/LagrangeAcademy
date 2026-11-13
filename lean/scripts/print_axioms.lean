@@ -158,3 +158,25 @@ import LagrangeAcademy
 #print axioms LagrangeAcademy.Ch10.threeState_not_complete
 #print axioms LagrangeAcademy.Ch10.threeStateExt_noArbitrage_quarter
 #print axioms LagrangeAcademy.Ch10.threeStateExt_noArbitrage_alt
+
+-- PartII/Ch11Numeraire.lean (Part II, chapter 11)
+#print axioms LagrangeAcademy.Ch11.normalize_price_self
+#print axioms LagrangeAcademy.Ch11.normalize_pay_self
+#print axioms LagrangeAcademy.Ch11.cost_normalize
+#print axioms LagrangeAcademy.Ch11.payoff_normalize
+#print axioms LagrangeAcademy.Ch11.div_sign
+#print axioms LagrangeAcademy.Ch11.isArbitrage_normalize_iff
+#print axioms LagrangeAcademy.Ch11.noArbitrage_normalize_iff
+#print axioms LagrangeAcademy.Ch11.numeraireProb_pos
+#print axioms LagrangeAcademy.Ch11.price_div_eq_expect
+#print axioms LagrangeAcademy.Ch11.noArbitrage_of_numeraireProb
+#print axioms LagrangeAcademy.Ch11.numeraireProb_change
+#print axioms LagrangeAcademy.Ch11.expect_density_eq_one
+#print axioms LagrangeAcademy.Ch11.twoState_statePrice_unique
+#print axioms LagrangeAcademy.Ch11.twoStatePsi_pos
+#print axioms LagrangeAcademy.Ch11.twoStatePsi_price
+#print axioms LagrangeAcademy.Ch11.twoState_bondProb
+#print axioms LagrangeAcademy.Ch11.twoState_stockProb
+#print axioms LagrangeAcademy.Ch11.twoState_bondProb_eq_q
+#print axioms LagrangeAcademy.Ch11.twoState_bondProb_eq_riskNeutral
+#print axioms LagrangeAcademy.Ch11.twoStateCall_not_numeraire

@@ -32,6 +32,7 @@ book:
     - part: "第II部　無裁定を中心とした金融数学"
       chapters:
         - ch10_finite_market.qmd
+        - ch11_numeraire.qmd
 
 format:
   html:

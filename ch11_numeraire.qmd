@@ -1,0 +1,345 @@
+# ニューメレールと価格の正規化
+
+```{r}
+#| label: setup-ch11
+#| include: false
+source("R/utility_LAD.R", encoding = "UTF-8")
+```
+
+第10章では、価格を「今日のお金」という単位で測り、正の状態価格があれば市場は無裁定であることを示した。この章では、価格を測る**単位**そのものを選び直す。
+
+$$
+\text{状態価格}
+\;\longrightarrow\;
+\text{基準資産の選択}
+\;\longrightarrow\;
+\text{ニューメレール}
+\;\longrightarrow\;
+\text{確率測度}
+$$
+
+の順に進む。要点は、ニューメレールを割引率として扱わないことである。ニューメレールは、市場で取引される資産のうち、価値の基準に選んだものである。どの資産を選ぶか、その資産の価格は正か、取引できるかを先に定義し、そのうえで、ニューメレールによる価格の正規化と、確率測度の関係を導く。
+
+市場は第10章の `FiniteMarket` をそのまま使い、確率は第8章の `FinProb` で表す。第10章と第8章のファイルは変えていない。割引債、マネーマーケット口座、短期金利の関係は、時間の構造を扱う章で扱う。
+
+## 市場の仮定と出発点
+
+### 市場
+
+第10章と同じく、1 期間で、満期の状態の集合 $\Omega$ と資産の集合 $I$ は有限であり、摩擦はなく、どの資産も任意の実数単位で売買できる。資産 $i$ の今日の価格を $p_i$、状態 $\omega$ での満期の支払いを $X_i(\omega)$ と書く。
+
+### 状態価格
+
+第10章の状態価格は、各状態の正の重み $\psi_\omega > 0$ で、すべての資産について
+
+$$
+p_i = \sum_\omega \psi_\omega X_i(\omega)
+$$
+
+を満たすものだった。状態価格は、それだけでは確率ではない。和は 1 とは限らず、何で割って正規化するかは決まっていない。その「何で割るか」を決めるのが、ニューメレールの選択である。
+
+## 基準資産の選択：ニューメレール
+
+価値の基準にする資産 $N$ に、次の 3 つの条件を課す。
+
+1. **取引できる**：$N$ は市場の資産の 1 つである（$N \in I$）。
+2. **今日の価格が正**：$p_N > 0$。
+3. **満期の支払いがどの状態でも正**：すべての $\omega$ で $X_N(\omega) > 0$。
+
+1 期間のモデルでは、「価格過程が正である」は 2 と 3 を合わせた条件になる。この 3 つを満たす資産を**ニューメレール**と呼ぶ。
+
+```{r}
+#| label: lean-ch11-numeraire
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "Numeraire")
+```
+
+条件 1 によって、外から与えた正の関数（割引係数や、状態ごとの正の重み）は、それが取引できる資産の支払いでない限り、ここではニューメレールと呼ばない。たとえば、状態価格 $\psi$ 自身は正の関数だが、資産ではない。債券は「満期にどの状態でも 1 を払う資産」としてニューメレールになりうるが、そのとき基準になるのは債券という**資産**であって、利子率や割引係数という数ではない。
+
+## 価格の正規化
+
+ニューメレール $N$ で測った価格と支払いは
+
+$$
+\frac{p_i}{p_N}, \qquad \frac{X_i(\omega)}{X_N(\omega)}
+$$
+
+である。これを価格と支払いとする市場を、$N$ で**正規化した市場**と呼ぶ。
+
+```{r}
+#| label: lean-ch11-normalize
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "normalizeBy")
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "normalize_price_self")
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "normalize_pay_self")
+```
+
+正規化した市場では、ニューメレール自身の価格と支払いがどちらも 1 になる。$N$ が、その市場の「債券の役」をする。
+
+ポートフォリオの費用と支払いも、それぞれ $p_N$ と $X_N(\omega)$ で割ったものになる。
+
+```{r}
+#| label: lean-ch11-normalize-cost
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "cost_normalize")
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "payoff_normalize")
+```
+
+### 無裁定は正規化で変わらない
+
+正の数で割っても、0 との大小は変わらない。裁定の条件（第10章）は、費用と支払いの 0 との大小だけで書かれているので、正規化の前後で、同じポートフォリオが裁定かどうかは変わらない。
+
+```{r}
+#| label: lean-ch11-arbitrage-invariant
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "div_sign")
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "isArbitrage_normalize_iff")
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "noArbitrage_normalize_iff")
+```
+
+**この 2 つの定理は、状態価格の存在を仮定していない**。仮定は、$N$ がニューメレールであること（3 つの条件）だけである。ニューメレールの選び方で、無裁定かどうかは変わらない。変わるのは、価格を測る単位である。
+
+## 状態価格からの確率測度
+
+ここからは、正の状態価格 $\psi$ があることを仮定する。正規化による無裁定の保存（前の節）とは別の主張で、前の節の定理はこの仮定を使わない。
+
+### 構成
+
+ニューメレール $N$ について
+
+$$
+Q^N(\omega) = \frac{\psi_\omega\, X_N(\omega)}{p_N}
+$$
+
+と定める。$\psi_\omega > 0$、$X_N(\omega) > 0$、$p_N > 0$ なので $Q^N(\omega) > 0$ で、$N$ の価格も状態価格で表せる（$p_N = \sum_\omega \psi_\omega X_N(\omega)$）ので、和は 1 になる。つまり $Q^N$ は確率である。
+
+```{r}
+#| label: lean-ch11-numeraire-prob
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "numeraireProb")
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "numeraireProb_pos")
+```
+
+`numeraireProb` は、第8章の有限の確率空間 `FinProb` の要素を作る。第8章の `FinProb` の条件（非負、和が 1）の証明を、状態価格とニューメレールの条件から与えている。
+
+### 価格の公式
+
+$Q^N$ のもとで、ニューメレールで測った価格は、ニューメレールで測った支払いの期待値になる。
+
+$$
+\frac{p_i}{p_N} = E_{Q^N}\!\left[\frac{X_i}{X_N}\right]
+$$
+
+```{r}
+#| label: lean-ch11-price-expect
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "price_div_eq_expect")
+```
+
+この定理が述べているのは、**1 期間の、期待値による価格の関係**である。今日の正規化した価格が、満期の正規化した支払いの $Q^N$ での期待値に等しい、という 1 つの等式で、条件つき期待値も、情報の増え方（フィルトレーション）も、価格過程が各時点の情報に適合していることも現れない。多期間では、これが「ニューメレールで測った価格過程が $Q^N$ のもとでマルチンゲールになる」ことに一般化されるが、その主張は、この章では定義も証明もしていない。
+
+### 逆向き
+
+逆に、ニューメレール $N$ と、どの状態でも正の確率 $Q$ があって、ニューメレールで測った価格が $Q$ のもとでの期待値になるなら、$\psi_\omega = p_N\, Q(\omega) / X_N(\omega)$ は正の状態価格である。したがって、第10章の `noArbitrage_of_statePrice` により、市場は無裁定である。
+
+```{r}
+#| label: lean-ch11-converse
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "noArbitrage_of_numeraireProb")
+```
+
+これは、資産価格の基本定理の易しい向きを、ニューメレールと確率の言葉で述べ直したものである。
+
+## ニューメレールの変更
+
+同じ状態価格 $\psi$ から、2 つのニューメレール $N$、$N'$ で作った確率は、次の関係にある。
+
+$$
+Q^{N'}(\omega) = Q^N(\omega) \cdot \frac{X_{N'}(\omega)/p_{N'}}{X_N(\omega)/p_N}
+$$
+
+右辺の比 $\dfrac{X_{N'}(\omega)/p_{N'}}{X_N(\omega)/p_N}$ は、$Q^N$ から $Q^{N'}$ への**密度**（有限の場合の Radon–Nikodym 微分）にあたる。密度の $Q^N$ のもとでの期待値は 1 である。
+
+```{r}
+#| label: lean-ch11-change
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "numeraireProb_change")
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "expect_density_eq_one")
+```
+
+**ニューメレールの変更は、現実世界で状態の発生確率が変わることを意味しない**。同一の資産価格を、異なる基準資産とそれに対応する確率測度で表現する操作である。$Q^N$ も $Q^{N'}$ も、状態価格 $\psi$ という同じ価格の情報を、それぞれの基準資産で正規化した重みであって、状態が実際にどれだけ起こりやすいかを表す確率（この本ではまだ導入していない）ではない。第6章・第8章で「リスク中立確率」と呼んだ $q$ も、債券を基準資産に選んだときの、この意味の確率である（この章の後半で確かめる）。
+
+`expect_density_eq_one` の証明は、変更の公式から、密度を掛けた $Q^N$ の各項が $Q^{N'}$ の各項に等しいことを使い、$Q^{N'}$ の和が 1 であることに帰着させている。
+
+## 第10章の 2 状態の例
+
+第10章の 2 状態の市場で、確率を資産の価格と支払いから計算し直す。資産と状態の順序は、第10章の `twoState` のとおりである。
+
+- 資産：`false` が債券、`true` が株。
+- 状態：`true` が上がる状態、`false` が下がる状態。
+
+| 資産 | 今日の価格 | 上がる状態（`true`）の支払い | 下がる状態（`false`）の支払い |
+|---|---|---|---|
+| 債券（`false`） | $19/20$ | 1 | 1 |
+| 株（`true`） | 100 | 120 | 90 |
+
+値は第10章と同じ合成の値である。
+
+### 状態価格
+
+状態価格 $(\psi_{\text{上}}, \psi_{\text{下}})$ は、債券と株の価格から、2 つの 1 次方程式
+
+$$
+\psi_{\text{上}} + \psi_{\text{下}} = \frac{19}{20}, \qquad 120\,\psi_{\text{上}} + 90\,\psi_{\text{下}} = 100
+$$
+
+で決まる。1 番目を 90 倍して 2 番目から引くと $30\,\psi_{\text{上}} = 100 - 85.5 = 14.5$ で、$\psi_{\text{上}} = 29/60$、$\psi_{\text{下}} = 19/20 - 29/60 = 7/15$ である。Lean では、価格を表す状態価格がこの値に**限られる**ことを証明した。
+
+```{r}
+#| label: lean-ch11-two-state-psi
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "twoState_statePrice_unique")
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "twoStatePsi")
+```
+
+第10章の 3 状態の例では状態価格が 1 つに決まらなかったが、この 2 状態の例では 1 つに決まる。第10章で示した完備性と対応している。
+
+### 債券と株をニューメレールにした確率
+
+債券も株も、価格が正で、どちらの状態でも支払いが正なので、ニューメレールになる。
+
+```{r}
+#| label: lean-ch11-two-state-numeraires
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "twoStateBond")
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "twoStateStock")
+```
+
+それぞれの確率は、$Q^N(\omega) = \psi_\omega X_N(\omega) / p_N$ から次のように計算できる。
+
+| ニューメレール | 上がる状態 | 下がる状態 |
+|---|---|---|
+| 債券 $B$ | $\dfrac{29/60 \cdot 1}{19/20} = \dfrac{29}{57}$ | $\dfrac{7/15 \cdot 1}{19/20} = \dfrac{28}{57}$ |
+| 株 $S$ | $\dfrac{29/60 \cdot 120}{100} = \dfrac{29}{50}$ | $\dfrac{7/15 \cdot 90}{100} = \dfrac{21}{50}$ |
+
+```{r}
+#| label: lean-ch11-two-state-probs
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "twoState_bondProb")
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "twoState_stockProb")
+```
+
+同じ市場、同じ状態価格から、ニューメレールの選び方によって、違う確率が出てくる。上がる状態の確率は、株をニューメレールにした方が大きい（$29/50 > 29/57$）。株は上がる状態で価値が大きいので、株を単位にすると、その状態に大きな重みがかかる。変更の公式で確かめると、$Q^S(\text{上}) = Q^B(\text{上}) \cdot \dfrac{120/100}{1/(19/20)} = \dfrac{29}{57} \cdot \dfrac{57}{50} = \dfrac{29}{50}$ である（確認用のスクリプトの 4 番目）。
+
+### 第6章のリスク中立確率との一致
+
+この市場を、第6章の 1 期間の二項モデルとして読む。
+
+- 債券は今日 $19/20$ で、満期に 1 を払うので、$1 + r = 20/19$、つまり $r = 1/19$。
+- 株は今日 100 で、上がれば 120、下がれば 90 なので、$u = 6/5$、$d = 9/10$。
+
+第6章の仮定 $0 < d < 1 + r < u$ は $0 < 0.9 < 1.0526\ldots < 1.2$ で満たされる。第6章のリスク中立確率は
+
+$$
+q = \frac{1 + r - d}{u - d} = \frac{20/19 - 9/10}{3/10} = \frac{29/190}{3/10} = \frac{29}{57}
+$$
+
+で、債券をニューメレールにした確率 $Q^B(\text{上})$ に一致する。
+
+```{r}
+#| label: lean-ch11-eq-q
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "twoStateBinomial")
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "twoState_bondProb_eq_q")
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "twoState_bondProb_eq_riskNeutral")
+```
+
+第6章と第8章では、$q$ を式で定義して「リスク中立確率」と呼んだ。この章で、その $q$ が「満期に 1 を払う債券をニューメレールにしたときの確率 $Q^B$」であることがわかった。第8章の `Binomial.riskNeutral` との一致も、状態の順序（`true` が上がる状態）が同じであることを確かめたうえで証明した。名前の「リスク中立」は、債券というニューメレールの選択を暗に含んでいる。
+
+### ニューメレールにならない資産
+
+行使価格 100 のコールは、下がる状態で支払いが 0 なので、条件 3 を満たさず、ニューメレールにならない。
+
+```{r}
+#| label: lean-ch11-call
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "twoStateCall")
+show_lean_declaration_LAD("PartII/Ch11Numeraire", "twoStateCall_not_numeraire")
+```
+
+### 確認用のスクリプト
+
+```{r}
+#| label: lean-ch11-checks
+#| echo: false
+#| output: asis
+show_lean_script_LAD("ch11_checks")
+```
+
+3 番目は、コールをニューメレールにしようとして、下がる状態の支払いが正であることを示せずに失敗する例である。
+
+```text
+ch11_checks.lean:22:15: error: unsolved goals
+case false
+⊢ False
+```
+
+正規化した市場の定義は、最初は `normalize` と名づけたが、Mathlib に同じ名前の関数（`_root_.normalize`）があり、確認用のスクリプトで `#check @normalize` が曖昧だと報告されたので、`normalizeBy` に変えた（2026-11-14 の作業記録）。
+
+## 数値の確認
+
+この章では、RiemannFinMath による数値の確認は行わず、新しい R の関数も加えていない。この章の内容（確率の構成、価格の公式、ニューメレールの変更）は、上の 2 状態の例で、有理数の値として Lean が確かめている。
+
+## 示したことと、示していないこと
+
+**Lean で証明したこと**
+
+- ニューメレールで正規化した市場で、ニューメレールの価格と支払いが 1 であること。費用と支払いがニューメレールの価格と支払いで割ったものになること。
+- 正規化の前後で、裁定と無裁定が同値であること（状態価格を仮定しない）。
+- 正の状態価格とニューメレールから作った $Q^N$ が、第8章の `FinProb` の要素で、どの状態でも正であること。
+- 価格の公式 $p_i / p_N = E_{Q^N}[X_i / X_N]$。
+- 逆向き：ニューメレールと正の確率で価格の公式が成り立てば、無裁定であること。
+- ニューメレールの変更の公式と、密度の期待値が 1 であること。
+- 2 状態の例：状態価格が資産の価格から一意に決まること、債券と株をニューメレールにした確率の値、債券の場合の確率が第6章の $q$ と第8章の `riskNeutral` に一致すること、コールがニューメレールにならないこと。
+
+**不完備な市場についての注意**（第10章とのつながり）
+
+- この章の確率 $Q^N$ は、状態価格 $\psi$ を 1 つ選んで作ったものである。2 状態の例のように状態価格が 1 つに決まる市場では、ニューメレールを固定すれば $Q^N$ も 1 つに決まる。
+- 第10章の 3 状態の例のように状態価格が 1 つに決まらない不完備な市場では、ニューメレールを固定しても、価格の公式を満たす確率測度は 1 つに決まるとは限らない。たとえば債券をニューメレールにすると、第10章の $\psi(t)$ の各 $t$ から、それぞれ別の $Q^B$ が得られる（数学的な説明。演習 3）。
+
+**数学的な説明だけのこと**
+
+- 1 期間の価格の公式が、多期間の「ニューメレールで測った価格過程がマルチンゲールになる」ことに一般化されること（多期間の主張は定義も証明もしていない）。
+- ニューメレールの変更が、現実世界の状態の発生確率を変えるものではないこと。
+- 密度 $\dfrac{X_{N'}/p_{N'}}{X_N/p_N}$ が、Radon–Nikodym 微分の有限の場合にあたること。
+
+**外部の文献の結果**（この本では証明も検査もしていない）
+
+- 連続時間のニューメレールの変更（Geman、El Karoui、Rochet、1995）と、フォワード測度。
+- formal-mathfin の Girsanov の定理（README の記述のみ。未確認）。
+
+**未証明で、後の章に回すこと**
+
+- 無裁定なら正の状態価格（したがって、ニューメレールごとの確率）が存在すること（資産価格の基本定理の逆向き。第12章で扱う予定）。
+- 多期間の市場での、ニューメレールで測った価格過程のマルチンゲール性。
+- 割引債、マネーマーケット口座、短期金利の関係（時間の構造を扱う章）。
+
+## 演習
+
+1. 2 状態の例で、株をニューメレールにした確率 $Q^S$ のもとで、行使価格 100 のコールの価格 $29/3$ を、$S_0 \cdot Q^S(\text{行使される状態})$ と債券の項に分けて書け。Black–Scholes の式の $S_0 N(d_1)$ の項と比べよ。
+2. 取引できない正の関数 $D(\omega)$ で支払いを割り、今日の価格を正の数 $d_0$ で割ったとき、`isArbitrage_normalize_iff` と同じことが言えるか。`numeraireProb` と同じ構成はできるか。何が違うか。
+3. 第10章の 3 状態の例で、債券をニューメレールにした確率が 1 つに決まらないことを、第10章の $\psi(t)$ を使って示せ。
+4. `expect_density_eq_one` を、`numeraireProb_change` を使わずに、状態価格の式から直接証明せよ。
