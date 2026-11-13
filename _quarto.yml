@@ -33,6 +33,7 @@ book:
       chapters:
         - ch10_finite_market.qmd
         - ch11_numeraire.qmd
+        - ch12_ftap.qmd
 
 format:
   html:

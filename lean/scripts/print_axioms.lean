@@ -180,3 +180,18 @@ import LagrangeAcademy
 #print axioms LagrangeAcademy.Ch11.twoState_bondProb_eq_q
 #print axioms LagrangeAcademy.Ch11.twoState_bondProb_eq_riskNeutral
 #print axioms LagrangeAcademy.Ch11.twoStateCall_not_numeraire
+
+-- PartII/Ch12FTAP.lean (Part II, chapter 12)
+#print axioms LagrangeAcademy.Ch12.convex_simplex
+#print axioms LagrangeAcademy.Ch12.isClosed_simplex
+#print axioms LagrangeAcademy.Ch12.isCompact_simplex
+#print axioms LagrangeAcademy.Ch12.noArbitrage_iff_disjoint
+#print axioms LagrangeAcademy.Ch12.basisVec_mem_simplex
+#print axioms LagrangeAcademy.Ch12.exists_statePrice_of_noArbitrage
+#print axioms LagrangeAcademy.Ch12.noArbitrage_iff_exists_statePrice
+#print axioms LagrangeAcademy.Ch12.noArbitrage_iff_exists_numeraireProb
+#print axioms LagrangeAcademy.Ch12.statePrice_unique_of_complete
+#print axioms LagrangeAcademy.Ch12.complete_of_statePrice_unique
+#print axioms LagrangeAcademy.Ch12.threeStateExt_isArbitrage_buy
+#print axioms LagrangeAcademy.Ch12.threeStateExt_isArbitrage_sell
+#print axioms LagrangeAcademy.Ch12.threeStateExt_noArbitrage_iff

@@ -14,3 +14,4 @@ public import LagrangeAcademy.PartI.Ch08Probability
 public import LagrangeAcademy.PartI.Ch09AIProof
 public import LagrangeAcademy.PartII.Ch10FiniteMarket
 public import LagrangeAcademy.PartII.Ch11Numeraire
+public import LagrangeAcademy.PartII.Ch12FTAP

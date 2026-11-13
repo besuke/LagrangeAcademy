@@ -1,0 +1,293 @@
+# 有限市場の資産価格の基本定理
+
+```{r}
+#| label: setup-ch12
+#| include: false
+source("R/utility_LAD.R", encoding = "UTF-8")
+```
+
+第10章では、正の状態価格があれば市場は無裁定であること（易しい向き）を示した。この章では、その逆、つまり**無裁定なら正の状態価格が存在する**ことを Lean で証明し、両者を合わせて、有限・1 期間の市場の**資産価格の基本定理**とする。
+
+$$
+\text{無裁定}
+\iff
+\text{正の状態価格が存在する}
+\iff
+\text{（ニューメレールを 1 つ固定して）正規化した価格が期待値になる正の確率が存在する}
+$$
+
+逆向きの証明の中心は、凸集合の分離定理である。Mathlib の強い分離定理を使い、その仮定を 1 つずつ満たして証明する。あわせて、完備性と状態価格の一意性の関係（両向き）と、第10章の 3 状態の例で、無裁定と両立する請求権の価格がちょうど $0 < \pi < 0.7$ であることを証明する。
+
+市場は第10章の `FiniteMarket`、ニューメレールと確率は第11章と第8章の定義を使う。第8章・第10章・第11章のファイルは変えていない。
+
+## 市場の仮定
+
+第10章と同じである。1 期間で、満期の状態の集合 $\Omega$ と資産の集合 $I$ は有限、摩擦はなく、どの資産も任意の実数単位で売買できる。状態はすべて経済的に起こりうる状態とみなす（裁定の定義で、すべての状態の支払いを数える）。
+
+**完備性**は、第10章の定義のとおり、任意の状態依存請求権（支払い $C : \Omega \to \mathbb{R}$）が、あるポートフォリオで複製できることである。
+
+## 証明する命題
+
+1. **無裁定の言い換え**：無裁定 ⟺ 利得部分空間と非負単体が交わらない。
+2. **資産価格の基本定理の逆向き**：無裁定なら、正の状態価格 $\psi$ が存在し、すべての資産で $p_i = \sum_\omega \psi_\omega X_i(\omega)$。
+3. **資産価格の基本定理**：無裁定 ⟺ 正の状態価格が存在する。
+4. **ニューメレールの形**：ニューメレール $N$ を 1 つ固定すると、無裁定 ⟺ $p_i / p_N = E_Q[X_i / X_N]$ を満たす、どの状態でも正の確率 $Q$ が存在する。
+5. **完備性と一意性**：
+   - 完備なら、価格を表す状態価格は 1 つに決まる。
+   - 無裁定で、正の状態価格が 1 つしかないなら、完備である。
+6. **3 状態の拡大市場**：第10章の 3 状態の市場に、状態 1 だけで 1 を払う請求権を価格 $\pi$ で加えた拡大市場は、$0 < \pi < 0.7$ のとき、そのときに限り無裁定である。
+
+## 数学的な証明の筋
+
+### 利得部分空間と非負単体
+
+ポートフォリオ $\theta$ に、**利得ベクトル**
+
+$$
+g(\theta) = \bigl(-\mathrm{cost}(\theta),\ \mathrm{payoff}(\theta)(\omega)\ (\omega \in \Omega)\bigr) \in \mathbb{R}^{1 + |\Omega|}
+$$
+
+を対応させる。最初の座標は「今日受け取る額」、残りは「満期に受け取る額」である。$g$ は線形なので、その像 $L$ は線形部分空間である（**利得部分空間**）。
+
+裁定とは、$g(\theta)$ のすべての座標が非負で、少なくとも 1 つが正であることにほかならない。そのようなベクトルは、座標の和で割ると、**非負単体**
+
+$$
+\Delta = \Bigl\{x \in \mathbb{R}^{1 + |\Omega|} \Bigm| x_k \ge 0\ (\text{すべての } k),\ \textstyle\sum_k x_k = 1\Bigr\}
+$$
+
+に入る。逆に、$L$ と $\Delta$ に共通のベクトルがあれば、それは裁定のポートフォリオの利得ベクトルである。したがって、**無裁定 ⟺ $L \cap \Delta = \emptyset$**。
+
+### 強い分離
+
+$\Delta$ は凸でコンパクト、$L$ は凸で閉（有限次元の部分空間）である。交わらない凸コンパクト集合と凸閉集合は、線形汎関数 $f$ と実数 $u < v$ で強く分離できる。
+
+$$
+f(a) < u \quad (a \in \Delta), \qquad u < v, \qquad v < f(b) \quad (b \in L).
+$$
+
+$L$ は部分空間なので、$f$ は $L$ の上で 0 である（$f(b) \ne 0$ なら、$b$ を何倍かすると $f$ の値をいくらでも小さくでき、$v < f(b)$ に反する）。$0 \in L$ から $v < 0$ で、$\Delta$ の上では $f < u < v < 0$ になる。とくに、$\Delta$ の頂点である各単位ベクトル $e_k$ で $f(e_k) < 0$ である。
+
+### すべての座標が正の汎関数と、状態価格
+
+$\varphi = -f$ とおき、$\lambda_k = \varphi(e_k)$ と書くと、**すべての座標で $\lambda_k > 0$** で、$\varphi(x) = \sum_k \lambda_k x_k$ である。$\varphi$ は $L$ の上で 0 なので、資産 $i$ を 1 単位持つポートフォリオについて
+
+$$
+0 = \varphi(g(\mathrm{unit}\ i)) = -\lambda_0\, p_i + \sum_\omega \lambda_\omega\, X_i(\omega).
+$$
+
+よって $p_i = \sum_\omega (\lambda_\omega / \lambda_0)\, X_i(\omega)$ で、$\psi_\omega = \lambda_\omega / \lambda_0 > 0$ が正の状態価格である。
+
+### 状態が 1 つもない場合
+
+$\Omega$ が空の場合も、この証明はそのまま成り立つ。利得ベクトルの添字の集合は、「今日」の座標を含むので空にならない。無裁定は「費用が負のポートフォリオがない」ことになり、上の議論から、すべての資産の価格が 0、状態価格は空の関数になる。そのため、Lean の定理では $\Omega$ が空でないこと（`Nonempty Ω`）を仮定していない。
+
+## Lean による証明
+
+コードは、Lean が検査したファイル `lean/LagrangeAcademy/PartII/Ch12FTAP.lean` から読み込んで示す。確認用のスクリプト `lean/scripts/ch12_checks.lean`（この節の最後に示す）は 2026-11-14 に `lean/` で実行した。
+
+### 利得ベクトルと利得部分空間
+
+座標の添字は `Option Ω` で表す。`none` が「今日」の座標（$-$費用）、`some ω` が状態 $\omega$ の座標である。
+
+```{r}
+#| label: lean-ch12-gain
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch12FTAP", "gainVector")
+show_lean_declaration_LAD("PartII/Ch12FTAP", "gainMap")
+show_lean_declaration_LAD("PartII/Ch12FTAP", "gainSubspace")
+```
+
+### 非負単体
+
+```{r}
+#| label: lean-ch12-simplex
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch12FTAP", "simplex")
+show_lean_declaration_LAD("PartII/Ch12FTAP", "convex_simplex")
+show_lean_declaration_LAD("PartII/Ch12FTAP", "isClosed_simplex")
+show_lean_declaration_LAD("PartII/Ch12FTAP", "isCompact_simplex")
+```
+
+Mathlib には標準単体 `stdSimplex` とその凸性・コンパクト性の定理があるが、この本が使う Mathlib v4.35.0 では、それらが非推奨（新しい型 `Convexity.StdSimplex` に置き換え）になっていた。最初の版で使ったところ、非推奨の警告が出た（2026-11-14 の作業記録）。分離定理には集合が要るので、同じ集合を `simplex` として定義し直し、凸性・閉集合であること・コンパクト性をここで証明した。
+
+### 無裁定の言い換え
+
+```{r}
+#| label: lean-ch12-disjoint
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch12FTAP", "noArbitrage_iff_disjoint")
+```
+
+右向き（⇒）では、単体と部分空間に共通のベクトル $x = g(\theta)$ があると仮定して、$\theta$ が裁定であることを示す。座標がすべて非負なので条件 1・2 が出て、和が 1 なので、どれかの座標が正であることから条件 3 が出る。左向き（⇐）では、裁定 $\theta$ の利得ベクトルを座標の和で割ったものが、単体と部分空間の両方に入ることを示す。
+
+### 逆向きの中心の定理
+
+```{r}
+#| label: lean-ch12-basis
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch12FTAP", "basisVec")
+show_lean_declaration_LAD("PartII/Ch12FTAP", "basisVec_mem_simplex")
+```
+
+```{r}
+#| label: lean-ch12-ftap
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch12FTAP", "exists_statePrice_of_noArbitrage")
+```
+
+証明は、数学的な証明の筋の 4 段をそのまま追っている（コメントの 1〜4）。使った Mathlib の定理と、その仮定の満たし方は次のとおりである。
+
+| Mathlib の定理 | 役割 | 満たした仮定 |
+|---|---|---|
+| `geometric_hahn_banach_compact_closed`（`Mathlib/Analysis/LocallyConvex/Separation.lean`） | 強い分離 | 空間 `Option Ω → ℝ` が局所凸な位相ベクトル空間であること（Mathlib のインスタンス）。$\Delta$ が凸（`convex_simplex`）でコンパクト（`isCompact_simplex`）。$L$ が凸（`Submodule.convex`）で閉（下の行）。$\Delta$ と $L$ が交わらない（`noArbitrage_iff_disjoint`） |
+| `Submodule.closed_of_finiteDimensional`（`Mathlib/Topology/Algebra/Module/FiniteDimension.lean`） | 有限次元の部分空間は閉 | 空間が Hausdorff で、部分空間が有限次元であること（Mathlib のインスタンス） |
+| `LinearMap.pi_apply_eq_sum_univ`（`Mathlib/LinearAlgebra/Pi.lean`） | 線形汎関数を座標で表す $\varphi(x) = \sum_k x_k \varphi(e_k)$ | 添字の集合が有限であること |
+
+分離定理が返す汎関数 `f` は連続な線形汎関数（`StrongDual ℝ E`）で、座標の表示には、それを線形写像とみなして使っている。中心の定理は、`sorry`・独自の公理・証明していない補題を使っていない（検証の節の `#print axioms`）。
+
+### 資産価格の基本定理
+
+```{r}
+#| label: lean-ch12-iff
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch12FTAP", "noArbitrage_iff_exists_statePrice")
+show_lean_declaration_LAD("PartII/Ch12FTAP", "noArbitrage_iff_exists_numeraireProb")
+```
+
+ニューメレールの形は、右向きでは、中心の定理で得た状態価格から第11章の `numeraireProb` を作り、左向きでは第11章の `noArbitrage_of_numeraireProb` を使う。ここで存在が示されるのは、ニューメレール $N$ を固定したときの確率 $Q$ で、市場が不完備なら $Q$ は 1 つとは限らない（第11章、次の小節）。
+
+### 完備性と状態価格の一意性
+
+```{r}
+#| label: lean-ch12-unique
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch12FTAP", "statePrice_unique_of_complete")
+```
+
+完備なら、状態 $\omega_0$ だけで 1 を払う支払い（Arrow 証券）を複製するポートフォリオがある。その費用は、第10章の `cost_eq_statePrice` により、どの状態価格で計算しても $\psi_{\omega_0}$ になる。だから状態価格は 1 つに決まる。この向きは、状態価格が正であることも、無裁定も使わない。
+
+```{r}
+#| label: lean-ch12-complete
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch12FTAP", "payoffMap")
+show_lean_declaration_LAD("PartII/Ch12FTAP", "complete_of_statePrice_unique")
+```
+
+逆向きでは、無裁定を明示的な仮定 `hna` として置く。証明の筋は次のとおりである。
+
+1. 完備でなければ、複製できる支払いの部分空間（`payoffMap` の像）は全体ではない。
+2. そのとき、その部分空間の上で 0 になる、0 でない線形汎関数 $g$ がある（Mathlib の `Submodule.exists_le_ker_of_lt_top`）。$g$ を座標で $\eta$ と表すと、$\eta \ne 0$ で、すべての資産について $\sum_\omega \eta_\omega X_i(\omega) = 0$。
+3. 中心の定理で正の状態価格 $\psi$ をとる。$\varepsilon = 1 / (1 + \sum_\omega |\eta_\omega| / \psi_\omega)$ とおくと、$\psi + \varepsilon \eta$ も正で、同じ価格を表す。
+4. $\eta \ne 0$ なので $\psi + \varepsilon\eta \ne \psi$ となり、正の状態価格が 1 つしかないという仮定に反する。
+
+無裁定の仮定は、3 で正の状態価格 $\psi$ を得るために使う。
+
+### 3 状態の拡大市場
+
+第10章の 3 状態の市場に、状態 1 だけで 1 を払う請求権 $H$ を、価格 $\pi$ の 3 つ目の資産として加えた拡大市場（第10章の `threeStateExt`）を考える。資産の順序は債券、株、$H$ で、状態の順序は 0、1、2 である。
+
+**$\pi \le 0$ の裁定**：$H$ を 1 単位買う。費用は $\pi \le 0$、満期の支払いは $(0, 1, 0)$ で、状態 1 で正である。
+
+**$\pi \ge 0.7$ の裁定**：債券 6 単位、株 $-0.05$ 単位、$H$ を $-1$ 単位持つ。
+
+| | 費用 | 状態 0 | 状態 1 | 状態 2 |
+|---|---|---|---|---|
+| 債券 6 単位 | $6 \cdot 19/20 = 5.7$ | 6 | 6 | 6 |
+| 株 $-0.05$ 単位 | $-0.05 \cdot 100 = -5$ | $-6$ | $-5$ | $-4.5$ |
+| $H$ を $-1$ 単位 | $-\pi$ | 0 | $-1$ | 0 |
+| 合計 | $0.7 - \pi$ | 0 | 0 | 1.5 |
+
+債券と株の部分は、$H$ を上から支配するポートフォリオ（支払い $(0, 1, 1.5)$、費用 0.7）である。$\pi \ge 0.7$ なら費用 $0.7 - \pi \le 0$ で、状態 2 で支払いが正なので、裁定になる。
+
+```{r}
+#| label: lean-ch12-arbitrage
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch12FTAP", "threeStateExt_isArbitrage_buy")
+show_lean_declaration_LAD("PartII/Ch12FTAP", "threeStateExt_isArbitrage_sell")
+```
+
+**$0 < \pi < 0.7$ の状態価格**：各 $\pi$ について、正の状態価格
+
+$$
+\psi(\pi) = \Bigl(\tfrac{2}{5} + \tfrac{1/4 - \pi}{3},\ \ \pi,\ \ \tfrac{3}{10} + \tfrac{2(1/4 - \pi)}{3}\Bigr)
+$$
+
+を構成する。これは第10章の $\psi(t)$ で $t = (1/4 - \pi)/30$ とおいたもので、債券・株・$H$ の 3 つの価格を表す。$\pi > 0$ から 2 番目が正、$\pi < 0.7$ から 3 番目が正（$\pi = 0.7$ でちょうど 0）、1 番目は $\pi < 1.45$ なら正である。
+
+```{r}
+#| label: lean-ch12-three-state-iff
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartII/Ch12FTAP", "threeStateExt_noArbitrage_iff")
+```
+
+第10章では、区間全体が無裁定価格であることを数学的な説明にとどめ、区間の外で裁定があることは扱わなかった。この定理で両方を Lean で証明した。区間の外の裁定は、資産価格の基本定理を使わず、裁定のポートフォリオを直接構成して示している。
+
+### 確認用のスクリプト
+
+```{r}
+#| label: lean-ch12-checks
+#| echo: false
+#| output: asis
+show_lean_script_LAD("ch12_checks")
+```
+
+3 番目は、境界の $\pi = 0.7$ でも裁定になることを示す。4 番目は、$\pi = 0.7$ では状態価格の 3 番目の重みが 0 になり、正の状態価格の構成が失敗することを示す。
+
+```text
+ch12_checks.lean:24:57: error: unsolved goals
+```
+
+## 検証
+
+2026-11-14 に `lean/` で次を実行した。どれにも `timeout` をつけた。
+
+- `lake env lean LagrangeAcademy/PartII/Ch12FTAP.lean`（第12章のファイルだけ）：エラーも警告もなし。
+- `lake build`：警告なし。
+- `lake env lean scripts/print_axioms.lean`：第12章の 13 の定理は、すべて `propext`、`Classical.choice`、`Quot.sound` だけに依存した。中心の定理 `exists_statePrice_of_noArbitrage` も同じである。
+
+途中の版では、Mathlib の非推奨の名前（`stdSimplex` とその定理、`Set.setOf_forall`、`continuous_finset_sum`）による警告と、Mathlib のリンターの警告（ゴールを変える `show`、結果の形を指定しない `simp`）が出た。どれも直して、警告のない状態にした。
+
+## 示したことと、示していないこと
+
+**Lean で証明したこと**
+
+- 無裁定 ⟺ 利得部分空間と非負単体が交わらない。
+- 無裁定なら正の状態価格が存在する（資産価格の基本定理の逆向き）。第10章の易しい向きと合わせた同値。
+- ニューメレールを固定した形：無裁定 ⟺ 正規化した価格が期待値になる正の確率が存在する。
+- 完備なら状態価格は 1 つ。無裁定で正の状態価格が 1 つなら完備。
+- 3 状態の拡大市場が無裁定 ⟺ $0 < \pi < 0.7$。$\pi \le 0$ と $\pi \ge 0.7$ の裁定のポートフォリオを直接構成した。
+
+**Mathlib の既存の定理に依存したこと**
+
+- 強い分離定理 `geometric_hahn_banach_compact_closed`（Hahn–Banach の幾何的な形）。
+- 有限次元の部分空間が閉集合であること（`Submodule.closed_of_finiteDimensional`）。
+- 有限個の座標の線形汎関数の表示（`LinearMap.pi_apply_eq_sum_univ`）。
+- 真の部分空間の上で 0 になる 0 でない線形汎関数の存在（`Submodule.exists_le_ker_of_lt_top`）。
+
+**数学的な説明のみのこと**
+
+- 分離定理の証明そのもの（Mathlib の証明に任せ、この本では説明していない）。
+- formal-mathfin の `FTAPOnePeriodVector.lean` は、ファイルの説明によれば、同じ向きを別の方法（softplus のポテンシャルの最小化）で証明している。読んだだけで、ビルドはしていない（未確認）。
+
+**未証明で、後の章に回すこと**
+
+- 多期間の資産価格の基本定理（Dalang–Morton–Willinger、1990）と、条件つき期待値によるマルチンゲール測度。
+- 連続時間の資産価格の基本定理（NFLVR、同値局所マルチンゲール測度。Delbaen–Schachermayer）。
+
+## 演習
+
+1. 中心の定理の証明で、利得ベクトルの「今日」の座標（`none`）がなかったら、どこで証明が失敗するか。状態価格の正規化の定数 $\lambda_0$ が正であることは、どこから来ているか。
+2. `statePrice_unique_of_complete` が、状態価格が正であることを使わないのはなぜか。負の状態価格を含めても、一意性の議論は同じか。
+3. `complete_of_statePrice_unique` の仮定から `hna` を外すと、結論は成り立つか。正の状態価格が 1 つもない市場で考えよ。
+4. 3 状態の拡大市場で、$\pi = 0.7$ のときの裁定のポートフォリオの支払いを確かめ、それが状態 2 でだけ正であることを確認せよ。$\pi$ が 0.7 にどれだけ近くても無裁定になるのに、0.7 で裁定になるのはなぜか。
+5. 第11章の 2 状態の例で、`noArbitrage_iff_exists_numeraireProb` の右辺の確率を、株をニューメレールにして求めよ。それは第11章の $Q^S$ と一致するか。
