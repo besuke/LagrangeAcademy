@@ -1,3 +1,246 @@
 # AIと形式的証明
 
-【執筆予定】この章の中心の問い：AIが数学的証明を生成する時代に、Leanはどのような役割を果たすのか。
+```{r}
+#| label: setup-ch09
+#| include: false
+source("R/utility_LAD.R", encoding = "UTF-8")
+```
+
+この章の問いは、**AI が数学的証明を生成する時代に、Lean はどのような役割を果たすのか**である。第I部の最後の章として、これまでの章で分けてきたこと（発見と検証、公理と仮定、命題と意図、実数と浮動小数点数）を、AI が証明を書く場面に当てはめる。次の順に進む。
+
+1. カーネルの検査を通ることは、何を保証し、何を保証しないか。
+2. カーネルの検査を通るが、意図した主張を述べていない定理の 3 つの型を、小さな例で組み立てる。
+3. 金融数学の形式化 formal-mathfin を読み、その自己申告の中に、同じ区別がどう現れているかを見る。
+4. この本を書く作業の中で、実際に何が Lean に捕まり、何が捕まらなかったかを記録する。
+
+## 問題提起：検査を通った証明は、何を意味するのか
+
+AI に「この価格の式が無裁定であることを Lean で証明して」と頼むと、`lake build` が通り、`#print axioms` に標準の 3 つの公理しか現れない証明が返ってくることがある。第1章の言葉では、AI は**発見**を担い、カーネルが**検証**を担う。証明の正しさを人が 1 行ずつ確かめる必要はない。
+
+しかし、カーネルが確かめるのは「この項が、この型を持つ」ことだけである（第4章）。その型、つまり命題が、頼んだ主張を表しているかは確かめない。AI が書いた証明について問うべきことは、「証明は正しいか」から「**この命題は、何を述べているか**」に移る。
+
+## 数学的背景
+
+### de Bruijn の基準
+
+証明支援系の信頼性は、**小さな検査器**に集約される。証明を見つける部分（タクティク、自動化、AI）がどれほど大きく複雑でも、最終的な項を小さなカーネルが検査すれば、信頼する必要があるのはカーネルだけになる。この設計の考え方は、Automath の de Bruijn にちなんで **de Bruijn の基準**と呼ばれる。第4章のカーネルと公理、第5章の「タクティクは項を組み立てる言語である」は、この基準の具体化である。
+
+AI は、この設計の「証明を見つける部分」に入る。AI の出力が誤っていても、カーネルが拒否する。AI が新しいタクティクや自動化を使っても、信頼の基盤は変わらない。
+
+### 命題の忠実性
+
+一方で、de Bruijn の基準が守るのは、**証明と命題の間**だけである。命題と、その命題で言いたかったこと（意図）の間は守らない。形式的な命題が意図に合っていることを、ここでは**命題の忠実性**と呼ぶ。自然言語の主張を形式的な命題に直すこと（自動形式化）では、忠実性がとくに問題になる。
+
+忠実性が崩れる典型は、次の 3 つである。
+
+| 型 | 内容 | カーネル | `#print axioms` |
+|---|---|---|---|
+| 結論を仮定に置く | 示したい結論を、構造体の項や仮定として置き、それを読み出す | 通る | 標準の 3 つ |
+| 矛盾した仮定 | 満たせない仮定を置く。そこからは何でも証明できる | 通る | 標準の 3 つ |
+| 弱い命題へのすり替え | 意図より弱い（あるいは別の）命題を証明する | 通る | 標準の 3 つ |
+
+3 つとも、カーネルの検査も、この本の合格条件（`sorry`・`axiom` を使わず、公理は標準の 3 つ）も通る。この本の合格条件の「弱い命題へのすり替えは不可」は、カーネルではなく、**人が命題を読んで判断する**項目である。
+
+## Lean による説明
+
+コードは、Lean が検査したファイル `lean/LagrangeAcademy/PartI/Ch09AIProof.lean` から読み込んで示す。`#print` などの結果は、確認用のスクリプト `lean/scripts/ch09_checks.lean`（この節の最後に示す）を 2026-11-13 に `lean/` で実行したものである。
+
+### 結論を構造体の項に置く
+
+第6章では、仮定を構造体の項に置いた。同じ書き方で、**結論**を項に置くこともできる。
+
+```{r}
+#| label: lean-spec
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch09AIProof", "StockMartingaleSpec")
+show_lean_declaration_LAD("PartI/Ch09AIProof", "expect_stock_of_spec")
+```
+
+この定理の結論は、第8章の `Binomial.expect_stock` と同じである。しかし証明は、仮定 `h` の項を読み出しているだけで、何も導いていない。`#print` で項を見ると、構造体の射影である。
+
+```text
+theorem LagrangeAcademy.Ch09.expect_stock_of_spec : ∀ (m : OnePeriodBinomial ℝ),
+  StockMartingaleSpec m → ∀ (s₀ : ℝ), (Binomial.riskNeutral m).expect (Binomial.stock m s₀) = (1 + m.r) * s₀ :=
+fun m h s₀ => h.martingale s₀
+```
+
+`#print axioms` では、第8章の定理と区別できない。
+
+```text
+'LagrangeAcademy.Ch08.Binomial.expect_stock' depends on axioms: [propext, Classical.choice, Quot.sound]
+'LagrangeAcademy.Ch09.expect_stock_of_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+```
+
+違いは、定理の**仮定**にある。`expect_stock_of_spec` は「仕様が成り立つならば、仕様の結論が成り立つ」と述べているにすぎない。この場合は、仕様が実際に満たされることを、第8章の定理から証明できる。
+
+```{r}
+#| label: lean-spec-holds
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch09AIProof", "stockMartingaleSpec_holds")
+```
+
+`stockMartingaleSpec_holds` があれば、`expect_stock_of_spec` の仮定 `h` を外せる。仕様を置いた定理を読むときは、**その仕様を満たす対象が、別の定理によって作られているか**を確かめる必要がある。
+
+### 矛盾した仮定
+
+仮定を誤って書くと、満たせない仮定になることがある。
+
+```{r}
+#| label: lean-bad-binomial
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch09AIProof", "BadBinomial")
+show_lean_declaration_LAD("PartI/Ch09AIProof", "BadBinomial.anything")
+```
+
+`BadBinomial.anything` は、`BadBinomial` の要素があれば、**どんな命題 `P` も**成り立つと述べる。価格についてのどんな主張も、この仮定のもとでは「証明」できる。カーネルの検査は通り、公理も標準の 3 つである（確認用のスクリプトの 4 番目）。
+
+この誤りに対しては、仮定が満たせるかを定理として確かめられる。`BadBinomial` は空であり、第6章の `OnePeriodBinomial` は空でない。
+
+```{r}
+#| label: lean-nonempty
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch09AIProof", "badBinomial_isEmpty")
+show_lean_declaration_LAD("PartI/Ch09AIProof", "onePeriodBinomial_nonempty")
+```
+
+具体的な値で `BadBinomial` の要素を作ろうとすると、仮定の証明が `False` に簡約されて失敗する（確認用のスクリプトの 3 番目）。
+
+```text
+ch09_checks.lean:24:10: error: unsolved goals
+⊢ False
+```
+
+第4章で、無裁定の仮定 `hna` を定理の引数に置いた。そのとき、具体的な市場に定理を適用するには `hna` の証明が要る、と述べた。矛盾した仮定は、それを**どの市場についても与えられない**場合である。定理は正しいが、使える場面がない。
+
+### 弱い命題へのすり替え
+
+```{r}
+#| label: lean-weak
+#| echo: false
+#| output: asis
+show_lean_declaration_LAD("PartI/Ch09AIProof", "exists_prob_weak")
+```
+
+この定理は正しい。しかし、「リスク中立確率は $0$ と $1$ の間にある」という主張の証明にはならない。述べているのは「$0$ と $1$ の間に数がある」ことだけで、二項モデルの $q$ は現れない。第6章の `q_pos` と `q_lt_one` は、モデル `m` の `m.q` について述べている。
+
+この例は極端だが、実際のすり替えは目立たない形をとる。量化子の順序が違う（「すべての $n$ について、ある $C$ がある」と「ある $C$ があって、すべての $n$ について」）、仮定が強すぎて特別な場合しか述べていない、結論が `≤` であるべきところで `∃` になっている、などである。カーネルは、どれも区別しない。
+
+### 確認用のスクリプト
+
+```{r}
+#| label: lean-ch09-checks
+#| echo: false
+#| output: asis
+show_lean_script_LAD("ch09_checks")
+```
+
+## 研究例：formal-mathfin を読む
+
+formal-mathfin（<https://github.com/formal-applied-math/formal-mathfin>）は、Mathlib と BrownianMotion の上に作られた金融数学の Lean のライブラリである。第1章で、その CRR から Black–Scholes への収束定理 `binomialPrice_call_tendsto_bs_closed` を紹介した。この本が参照したのはコミット `406ddbb`（2026-11-09、Lean 4.35.0）で、作業用のフォルダーに clone して読んだ。**ビルドはしていない**。以下の README などの記述は、プロジェクトの自己申告である。
+
+### 自己申告の中の区別
+
+README は、文献の 804 の結果を `benchmarks/` に記録し、そのうち 766 は完全に証明し、18 は Mathlib や BrownianMotion の補題を述べ直したもの、20 は「名前のついた結果より少ないことを証明する、縮小した核（reduced core）」だと述べている。各項目は、その状態と、何を除いたかを記録しているという。
+
+`benchmarks/` の JSON ファイルの `formalization_status` を数えると、`full` が 790、`library_wrapper` が 18、`reduced_core` が 20 だった。`full` の数が README の 766 と違う理由（数え方の違いか、README が古いのか）は確かめていない。
+
+`reduced_core` の 1 つ、`brownian_motion.json` の Reflection Principle（反射原理、項目 `bm-thm-5.1.7`）の記述は、この章の「結論を構造体の項に置く」型そのものである。
+
+> the structure encodes the textbook hypotheses and the textbook conclusion as fields, so any inhabitant satisfies the textbook statement by construction; the theorem reads off the conclusion via a structural projection. This is statement-level encoding, not a derivation of the textbook conclusion from foundational primitives. Marked `reduced_core` to remain honest
+
+この区別は、カーネルも `#print axioms` も付けてくれない。プロジェクト自身が、命題を読んで項目ごとに記録している。README が「ライブラリに `sorry` はなく、標準の 3 つの公理だけに依存することをビルドの時に検査する」と書いていることと、20 の項目が `reduced_core` であることは、矛盾しない。前者はカーネルが確かめられること、後者は人（あるいは AI）が命題を読んで判断することだからである。
+
+### AI と人の役割
+
+リポジトリには `AGENTS.md` と `CLAUDE.md` があり、`AGENTS.md` は「このリポジトリで作業する Codex への指針」で、「`CLAUDE.md` が唯一の正式な参照」だと述べている。開発に AI のエージェントが使われていることが、リポジトリから読み取れる。同じファイルには次の 1 文がある。
+
+> Automation (grind / hammer / loogle) is a scout, not an author
+
+自動化は「偵察」であって「著者」ではない、という区別は、第1章の発見と検証の区別に近い。ただし、この 1 文が具体的にどういう手続きを指すか（`CLAUDE.md` の該当の節）は、この本では読んでいない。
+
+### 第1章の定理をもう一度読む
+
+第1章の定理は、仮定 `hna` として、すべての段数 $n \ge 1$ で二項木に裁定がないことを置いていた。README は、この仮定が $|r|\sqrt{T} < \sigma$ のときに成り立つという定理 `binomialNoArb_crr`（`MathFin/Models/Binomial/CRRConvergence.lean`）があると述べている。これは、この章の「矛盾した仮定」への備え、つまり**仮定を満たす場合が実際にあることの証明**にあたる。この本では、その定理の文面を確かめていない。第II部で、この 2 つの定理を読むときに確かめる。
+
+## この本の作業記録から
+
+「はじめに」で述べたとおり、この本の作業の一部は AI と分担して進めた。第I部では、AI（Claude）が本文と Lean のコードを書き、別の AI（ChatGPT）が本文をレビューし、人（著者）が方針を決めて確認した。その作業の中で起きたことのうち、誤りがどこで見つかったかを、実際の記録だけから分類する。日付はどれも 2026 年 11 月である。
+
+### Lean が捕まえた誤り
+
+| 章 | 誤り | Lean の反応 |
+|---|---|---|
+| 第5章 | 帰納法の段階で、展開の補題に `Nat.succ_mul` と `Nat.mul_succ` を選んだ | `omega` が反例の可能性を報告して失敗 |
+| 第6章 | 定理を `add_sq'` と名づけた（Mathlib の `_root_.add_sq'` と衝突） | 確認用のスクリプトで、両方の候補の失敗を報告 |
+| 第6章 | `Decidable` を「構成子が 2 つの帰納型」とコメントに書いた | `#print Decidable` が、真理値と証明を項に持つ構造体だと表示 |
+| 第7章 | `(1/10 + 2/10 : ℚ) = 3/10` を `decide` で証明しようとした | カーネルの簡約が止まったと報告 |
+| 第7章 | 「Lean の中に `Float` の定理はほとんどない」「`decide` で `Float` について何も示せない」と下書きに書いた | `decide` が `(0.1 + 0.2 : Float) ≠ 0.3` を証明した。下書きを直した |
+| 第8章 | Mathlib の古い名前を使い、名前空間の名前が第6章の構造体と重なった | 非推奨の警告と、`Unknown identifier` のエラー |
+
+どれも、Lean のコードか、Lean で確かめられる事実についての誤りである。第6章と第7章の例は、AI が持っていた Lean についての知識が、実際の Lean 4.35.0 と食い違っていた例でもある。
+
+### Lean が捕まえなかった誤り
+
+次は、各章のレビュー（ChatGPT）で指摘され、著者の指示で直したものの一部である。
+
+| 章 | 本文の誤り（直す前） |
+|---|---|
+| 第4章 | `Classical.choice` を「`Prop` からデータを取り出す制約を破る」公理と説明した |
+| 第4章 | 「仮定が偽の市場には証明が作れない」と断定した |
+| 第5章 | 存在の除去を「`Prop` のときだけ」と、例外に触れずに書いた |
+| 第5章 | `decide` の失敗を「無限に多い自然数を調べる手続きがないから」と説明した |
+| 第6章 | 型クラスを「型を引数に持つ構造体」と書いた |
+| 第7章 | プット・コール・パリティの数値の差を「丸めの誤差である」と断定した |
+
+どれも、Lean のコードは正しく、検査も通っていた。誤っていたのは、コードについての**説明**、つまり自然言語の命題である。カーネルは本文を読まない。
+
+### 作業の環境で起きたこと
+
+- **Lake が起動しなかった**（第4章の修正のとき）：`lake` が出力なしに終了した。Windows のコード整合性のイベントログから、Smart App Control が `libLake_shared.dll` の読み込みを止めていたことを突き止めた。直すには Windows のセキュリティの設定を変える必要があり、その判断は著者が行った。
+- **作業が止まったまま気づかなかった**（第7章のとき）：コマンドの先頭に置いた不要な `python3` の 1 行が終わらず、作業が 18 時間以上止まっていた。気づいたのは著者で、AI は自分では気づかなかった。その後、Lean・Lake・Quarto のコマンドには、すべて時間の制限をつけた。
+
+これらは数学の誤りではないが、「検査を通った」という報告の前提（検査が実際に実行されたこと）にかかわる。
+
+## 検証
+
+2026-11-13 に `lean/` で次を実行した。どれにも `timeout` をつけた。
+
+- `lake env lean LagrangeAcademy/PartI/Ch09AIProof.lean`（第9章のファイルだけ）：エラーも警告もなし。
+- `lake build`：警告なし。
+- `lake env lean scripts/print_axioms.lean`：結果は次のとおりである。
+
+| 定理 | 内容 | 依存する公理 |
+|---|---|---|
+| `expect_stock_of_spec` | 仕様の項を読み出すだけの定理 | `propext`、`Classical.choice`、`Quot.sound` |
+| `stockMartingaleSpec_holds` | 仕様が満たされること（第8章の定理による） | `propext`、`Classical.choice`、`Quot.sound` |
+| `BadBinomial.anything` | 矛盾した仮定からの任意の命題 | `propext`、`Classical.choice`、`Quot.sound` |
+| `badBinomial_isEmpty` | 矛盾した仮定の構造体が空であること | `propext`、`Classical.choice`、`Quot.sound` |
+| `onePeriodBinomial_nonempty` | 第6章の仮定が満たせること | `propext`、`Classical.choice`、`Quot.sound` |
+| `exists_prob_weak` | 弱い命題 | `propext`、`Classical.choice`、`Quot.sound` |
+
+この表そのものが、この章の主張の確認になっている。「意味のある定理」と「意図を述べていない定理」が、公理への依存では区別できない。
+
+## 金融数学への接続
+
+AI が書いた（あるいは誰が書いたのでも）金融数学の Lean の定理を読むときに、カーネルが確かめないことを、人が確かめる手順にまとめる。
+
+1. **公理**：`#print axioms` に、標準の 3 つ以外が現れないか（第4章）。これはカーネルと Lean が確かめる。
+2. **結論が導かれているか**：結論、あるいはそれに近い主張が、仮定や構造体の項に入っていないか（この章）。
+3. **仮定が満たせるか**：仮定を満たす具体的なモデルや、仮定が成り立つ条件の定理があるか（`onePeriodBinomial_nonempty`、formal-mathfin の `binomialNoArb_crr`）。
+4. **命題が主張に合っているか**：量化子の順序、対象（どの $q$、どの価格）、等式か不等式か。本書の問い「この価格は、どの市場の仮定のもとで、無裁定条件を満たすのか」に照らして、仮定に市場の前提（取引できるもの、測度、ニューメレール）が、結論に価格の主張が、それぞれ正しく現れているか。
+5. **数値の確認は例にすぎない**：RiemannFinMath の数値が関係を満たしていても、それは「この例で、丸めの誤差と整合的な大きさの差で成り立つ」ことだけである（第7章）。
+6. **現実への適合は別の問題**：仮定が現実の市場に合っているかは、Lean の証明の外にある（第4章、第6章）。
+
+1 は機械が確かめ、2〜4 は命題を読む人（あるいは別の AI）が確かめ、5〜6 は数学の外の判断である。AI が証明を書くことで、1 は安く、速くなった。その分、2〜6 の比重が大きくなる。第II部では、無裁定価格理論の定理を、この手順で 1 つずつ読んでいく。
+
+## 演習
+
+1. `StockMartingaleSpec` の代わりに、「1 期後に支払い $V$ の派生証券の無裁定価格は $E_q[V]/(1+r)$ である」を項に持つ構造体を書き、それを読み出す定理を作れ。その構造体を満たす対象を作るには、何を証明する必要があるか。
+2. `BadBinomial` の仮定 `lt_d` を `d < 1 + r + 1` に替えると、構造体は空でなくなるか。`Nonempty` を示せ。
+3. 「すべての $n$ について、ある $C$ があって $f(n) \le C$」と「ある $C$ があって、すべての $n$ について $f(n) \le C$」を Lean で書き、一方から他方が導けるかを調べよ。前者しか示していない収束の定理は、何を言い損なっているか。
+4. 第1〜8章の定理から 1 つ選び、この章の手順の 2〜4 を当てはめて、命題が述べていることと述べていないことを書け。
+5. formal-mathfin の `benchmarks/` から `reduced_core` の項目を 1 つ選び、その `formalization_scope` を読んで、何が除かれているかを説明せよ。この本の作業と同じく、clone して読むだけでよい（ビルドしなくてよい）。

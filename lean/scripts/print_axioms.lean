@@ -121,3 +121,11 @@ import LagrangeAcademy
 #print axioms LagrangeAcademy.Ch08.integral_eq_sum
 #print axioms LagrangeAcademy.Ch08.Binomial.expect_stock
 #print axioms LagrangeAcademy.Ch08.Binomial.discounted_expect_nonneg
+
+-- PartI/Ch09AIProof.lean (Part I, chapter 9)
+#print axioms LagrangeAcademy.Ch09.expect_stock_of_spec
+#print axioms LagrangeAcademy.Ch09.stockMartingaleSpec_holds
+#print axioms LagrangeAcademy.Ch09.BadBinomial.anything
+#print axioms LagrangeAcademy.Ch09.badBinomial_isEmpty
+#print axioms LagrangeAcademy.Ch09.onePeriodBinomial_nonempty
+#print axioms LagrangeAcademy.Ch09.exists_prob_weak
